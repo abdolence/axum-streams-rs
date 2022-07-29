@@ -36,7 +36,7 @@ where
                 .from_writer(vec![]);
             writer.serialize(obj).map_err(axum::Error::new)?;
             writer.flush().map_err(axum::Error::new)?;
-            Ok(writer.into_inner().map_err(axum::Error::new)?)
+            writer.into_inner().map_err(axum::Error::new)
         }
 
         let stream_with_header = self.with_header;
@@ -49,7 +49,7 @@ where
                     write_csv_record(obj, false, stream_delimiter)
                 };
 
-                write_csv_res.map(|obj_vec| axum::body::Bytes::from(obj_vec))
+                write_csv_res.map(axum::body::Bytes::from)
             })
         });
 

@@ -26,7 +26,7 @@ where
                 serde_json::to_vec::<T>(&obj)
                     .map(|obj_vec| {
                         if index != 0 {
-                            output.extend(JSON_ARRAY_SEP_BYTES.clone())
+                            output.extend(JSON_ARRAY_SEP_BYTES)
                         }
                         output.extend(obj_vec);
                         axum::body::Bytes::from(output)
@@ -37,12 +37,12 @@ where
 
         let prepend_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
             Box::pin(futures_util::stream::once(futures_util::future::ready(
-                Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_BEGIN_BYTES.clone())),
+                Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_BEGIN_BYTES)),
             )));
 
         let append_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
             Box::pin(futures_util::stream::once(futures_util::future::ready(
-                Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_END_BYTES.clone())),
+                Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_END_BYTES)),
             )));
 
         Box::pin(prepend_stream.chain(stream_bytes.chain(append_stream)))
@@ -80,7 +80,7 @@ where
                 serde_json::to_vec::<T>(&obj)
                     .map(|obj_vec| {
                         if index != 0 {
-                            output.extend(JSON_NL_SEP_BYTES.clone())
+                            output.extend(JSON_NL_SEP_BYTES)
                         }
                         output.extend(obj_vec);
                         axum::body::Bytes::from(output)
@@ -102,11 +102,11 @@ where
     }
 }
 
-const JSON_ARRAY_BEGIN_BYTES: &'static [u8] = "[".as_bytes();
-const JSON_ARRAY_END_BYTES: &'static [u8] = "]".as_bytes();
-const JSON_ARRAY_SEP_BYTES: &'static [u8] = ",".as_bytes();
+const JSON_ARRAY_BEGIN_BYTES: &[u8] = "[".as_bytes();
+const JSON_ARRAY_END_BYTES: &[u8] = "]".as_bytes();
+const JSON_ARRAY_SEP_BYTES: &[u8] = ",".as_bytes();
 
-const JSON_NL_SEP_BYTES: &'static [u8] = "\n".as_bytes();
+const JSON_NL_SEP_BYTES: &[u8] = "\n".as_bytes();
 
 #[cfg(test)]
 mod tests {
