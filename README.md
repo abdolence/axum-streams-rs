@@ -2,15 +2,17 @@
 ![tests and formatting](https://github.com/abdolence/axum-streams-rs/workflows/tests%20&amp;%20formatting/badge.svg)
 ![security audit](https://github.com/abdolence/axum-streams-rs/workflows/security%20audit/badge.svg)
 
-# Axum Streams for Rust
+# axum streams for Rust
 
 Library provides HTTP response streaming support for [Axum web framework](https://github.com/tokio-rs/axum):
 - JSON array stream format
 - JSON lines stream format
 - CSV stream
 
-## Quick start
+This type of responses are useful when you are reading huge stream of objects from some source (such as database, file, etc)
+and want to avoid huge memory allocations to store on the server side.
 
+## Quick start
 
 Cargo.toml:
 ```toml
