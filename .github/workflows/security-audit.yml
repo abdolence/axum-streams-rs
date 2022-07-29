@@ -6,6 +6,7 @@ on:
       - '**/Cargo.lock'
   schedule:
     - cron: '5 4 * * 6'
+  workflow_dispatch:
 jobs:
   security_audit:
     runs-on: ubuntu-latest
