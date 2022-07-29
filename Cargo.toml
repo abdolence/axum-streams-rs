@@ -58,3 +58,6 @@ required-features = ["json"]
 name = "csv-example"
 path = "examples/csv-example.rs"
 required-features = ["csv"]
+
+[build-dependencies]
+cargo-husky = { version = "1.5", default-features = false, features = ["run-for-all", "prepush-hook", "run-cargo-fmt"] }
