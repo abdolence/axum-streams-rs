@@ -5,6 +5,7 @@
 /// - JSON array stream format
 /// - JSON Lines (NL/NewLines) format
 /// - CSV stream format
+/// - Protobuf len-prefixed stream format
 ///
 /// [JSON Streaming](https://en.wikipedia.org/wiki/JSON_streaming) is a term referring to streaming a
 /// stream of element as independent JSON objects as a continuous HTTP request or response.
@@ -48,6 +49,7 @@
 /// async fn test_json_nl_stream() -> impl IntoResponse {
 ///     StreamBodyWith::json_nl(my_source_stream())
 /// }
+///
 /// async fn test_csv_stream() -> impl IntoResponse {
 ///     StreamBodyWith::csv(my_source_stream())
 ///     // Which is the same as:
@@ -74,6 +76,11 @@ pub use json_formats::JsonNewLineStreamFormat;
 mod csv_format;
 #[cfg(feature = "csv")]
 pub use csv_format::CsvStreamFormat;
+
+#[cfg(feature = "protobuf")]
+mod protobuf_format;
+#[cfg(feature = "protobuf")]
+pub use protobuf_format::ProtobufStreamFormat;
 
 #[cfg(test)]
 mod test_client;

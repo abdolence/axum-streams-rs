@@ -33,11 +33,13 @@ tokio-stream = { version = "0.1" }
 tokio-util = { version = "0.7" }
 futures = "0.3"
 csv = { version = "1.1", optional = true }
+prost = { version="0.10", optional = true }
 
 [features]
 default = []
 json = ["dep:serde", "dep:serde_json"]
 csv = ["dep:csv", "dep:serde"]
+protobuf = ["dep:prost"]
 
 [dev-dependencies]
 futures = "0.3"
@@ -48,6 +50,7 @@ tower-http = { version = "0.3", features = ["util", "map-response-body"] }
 tower-layer = "0.3"
 tower-service = "0.3"
 tokio = { version = "1.20", features = ["full"] }
+prost = { version= "0.10", features = ["prost-derive"] }
 
 [[example]]
 name = "json-example"
@@ -58,6 +61,11 @@ required-features = ["json"]
 name = "csv-example"
 path = "examples/csv-example.rs"
 required-features = ["csv"]
+
+[[example]]
+name = "protobuf-example"
+path = "examples/protobuf-example.rs"
+required-features = ["protobuf"]
 
 [build-dependencies]
 cargo-husky = { version = "1.5", default-features = false, features = ["run-for-all", "prepush-hook", "run-cargo-fmt"] }

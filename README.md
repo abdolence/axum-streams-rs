@@ -8,6 +8,7 @@ Library provides HTTP response streaming support for [Axum web framework](https:
 - JSON array stream format
 - JSON lines stream format
 - CSV stream
+- Protobuf len-prefixed stream format
 
 This type of responses are useful when you are reading huge stream of objects from some source (such as database, file, etc)
 and want to avoid huge memory allocations to store on the server side.
@@ -17,7 +18,7 @@ and want to avoid huge memory allocations to store on the server side.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.2", features=["json", "csv"] }
+axum-streams = { version = "0.3", features=["json", "csv"] }
 ```
 
 Example code:

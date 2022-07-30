@@ -106,7 +106,7 @@ mod tests {
 
         let client = TestClient::new(app);
 
-        let expected_json = test_stream_vec
+        let expected_csv = test_stream_vec
             .iter()
             .map(|item| format!("{},{}", item.foo1, item.foo2))
             .collect::<Vec<String>>()
@@ -116,6 +116,6 @@ mod tests {
         let res = client.get("/").send().await.unwrap();
         let body = res.text().await.unwrap();
 
-        assert_eq!(body, expected_json);
+        assert_eq!(body, expected_csv);
     }
 }
