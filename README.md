@@ -38,15 +38,15 @@ fn source_test_stream() -> BoxStream<'static, MyTestStructure> {
 }
 
 async fn test_json_array_stream() -> impl IntoResponse {
-  StreamBodyWithFormat ::new(JsonArrayStreamFormat::new(), source_test_stream())
+  StreamBodyWithFormat::new(JsonArrayStreamFormat::new(), source_test_stream())
 }
 
 async fn test_json_nl_stream() -> impl IntoResponse {
-  StreamBodyWithFormat ::new(JsonNewLineStreamFormat::new(), source_test_stream())
+  StreamBodyWithFormat::new(JsonNewLineStreamFormat::new(), source_test_stream())
 }
 
 async fn test_csv_stream() -> impl IntoResponse {
-    StreamBodyWithFormat ::new(CsvStreamFormat::new(
+    StreamBodyWithFormat::new(CsvStreamFormat::new(
         true, // with_header
         b',' // CSV delimiter
     ), source_test_stream())

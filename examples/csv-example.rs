@@ -29,13 +29,16 @@ fn source_test_stream() -> BoxStream<'static, MyTestStructure> {
 }
 
 async fn test_csv_stream() -> impl IntoResponse {
-    StreamBodyWithFormat::new(
-        CsvStreamFormat::new(
-            true, // with_header
-            b',', // CSV delimiter
-        ),
-        source_test_stream(),
-    )
+    StreamBodyWith::csv(source_test_stream())
+
+    // Which is the same as:
+    // StreamBodyWith::new(
+    //     CsvStreamFormat::new(
+    //         true, // with_header
+    //         b',', // CSV delimiter
+    //     ),
+    //     source_test_stream(),
+    // )
 }
 
 #[tokio::main]

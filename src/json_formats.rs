@@ -108,11 +108,27 @@ const JSON_ARRAY_SEP_BYTES: &[u8] = ",".as_bytes();
 
 const JSON_NL_SEP_BYTES: &[u8] = "\n".as_bytes();
 
+impl<'a> crate::StreamBodyWith<'a> {
+    pub fn json_array<T>(stream: BoxStream<'a, T>) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+    {
+        Self::new(JsonArrayStreamFormat::new(), stream)
+    }
+
+    pub fn json_nl<T>(stream: BoxStream<'a, T>) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+    {
+        Self::new(JsonNewLineStreamFormat::new(), stream)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_client::*;
-    use crate::StreamBodyWithFormat;
+    use crate::StreamBodyWith;
     use axum::{routing::*, Router};
     use futures_util::stream;
 
@@ -134,7 +150,7 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async { StreamBodyWithFormat::new(JsonArrayStreamFormat::new(), test_stream) }),
+            get(|| async { StreamBodyWith::new(JsonArrayStreamFormat::new(), test_stream) }),
         );
 
         let client = TestClient::new(app);
@@ -164,9 +180,7 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async {
-                StreamBodyWithFormat::new(JsonNewLineStreamFormat::new(), test_stream)
-            }),
+            get(|| async { StreamBodyWith::new(JsonNewLineStreamFormat::new(), test_stream) }),
         );
 
         let client = TestClient::new(app);

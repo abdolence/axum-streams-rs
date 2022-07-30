@@ -63,11 +63,20 @@ where
     }
 }
 
+impl<'a> crate::StreamBodyWith<'a> {
+    pub fn csv<T>(stream: BoxStream<'a, T>) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+    {
+        Self::new(CsvStreamFormat::new(false, b','), stream)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_client::*;
-    use crate::StreamBodyWithFormat;
+    use crate::StreamBodyWith;
     use axum::{routing::*, Router};
     use futures_util::stream;
     use std::ops::Add;
@@ -92,9 +101,7 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async {
-                StreamBodyWithFormat::new(CsvStreamFormat::new(false, b','), test_stream)
-            }),
+            get(|| async { StreamBodyWith::new(CsvStreamFormat::new(false, b','), test_stream) }),
         );
 
         let client = TestClient::new(app);

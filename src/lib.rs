@@ -43,23 +43,25 @@
 ///
 /// // Route implementation:
 /// async fn test_json_array_stream() -> impl IntoResponse {
-///     StreamBodyWithFormat ::new(JsonArrayStreamFormat::new(), my_source_stream())
+///     StreamBodyWith::json_array(my_source_stream())
 /// }
 /// async fn test_json_nl_stream() -> impl IntoResponse {
-///     StreamBodyWithFormat ::new(JsonNewLineStreamFormat::new(), my_source_stream())
+///     StreamBodyWith::json_nl(my_source_stream())
 /// }
 /// async fn test_csv_stream() -> impl IntoResponse {
-///     StreamBodyWithFormat ::new(CsvStreamFormat::new(
-///         true, // with_header
-///         b',' // CSV delimiter
-///     ), my_source_stream())
+///     StreamBodyWith::csv(my_source_stream())
+///     // Which is the same as:
+///     // StreamBodyWith::new(CsvStreamFormat::new(
+///     //    true, // with_header
+///     //    b',' // CSV delimiter
+///     //), my_source_stream())
 /// }
 ///
 /// ```
 mod stream_format;
 
 mod stream_body_with;
-pub use self::stream_body_with::StreamBodyWithFormat;
+pub use self::stream_body_with::StreamBodyWith;
 
 #[cfg(feature = "json")]
 mod json_formats;

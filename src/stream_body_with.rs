@@ -7,19 +7,19 @@ use std::fmt::Formatter;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub struct StreamBodyWithFormat<'a> {
+pub struct StreamBodyWith<'a> {
     stream: BoxStream<'a, Result<axum::body::Bytes, axum::Error>>,
     trailers: Option<HeaderMap>,
 }
 
-impl<'a> std::fmt::Debug for StreamBodyWithFormat<'a> {
+impl<'a> std::fmt::Debug for StreamBodyWith<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "StreamBodyWithFormat")
     }
 }
 
-impl<'a> StreamBodyWithFormat<'a> {
-    /// Create a new `StreamBodyWithFormat` providing a stream of your objects in the specified format.
+impl<'a> StreamBodyWith<'a> {
+    /// Create a new `StreamBodyWith` providing a stream of your objects in the specified format.
     pub fn new<T, FMT>(stream_format: FMT, stream: BoxStream<'a, T>) -> Self
     where
         FMT: StreamingFormat<T>,
@@ -31,13 +31,13 @@ impl<'a> StreamBodyWithFormat<'a> {
     }
 }
 
-impl IntoResponse for StreamBodyWithFormat<'static> {
+impl IntoResponse for StreamBodyWith<'static> {
     fn into_response(self) -> Response {
         Response::new(axum::body::boxed(self))
     }
 }
 
-impl<'a> HttpBody for StreamBodyWithFormat<'a> {
+impl<'a> HttpBody for StreamBodyWith<'a> {
     type Data = axum::body::Bytes;
     type Error = axum::Error;
 
