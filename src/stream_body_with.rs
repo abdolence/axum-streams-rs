@@ -25,7 +25,7 @@ impl<'a> StreamBodyWith<'a> {
         FMT: StreamingFormat<T>,
     {
         Self {
-            stream: stream_format.bytes_stream(stream),
+            stream: stream_format.to_bytes_stream(stream),
             trailers: stream_format.http_response_trailers(),
         }
     }

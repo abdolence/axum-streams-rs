@@ -16,7 +16,7 @@ impl<T> StreamingFormat<T> for JsonArrayStreamFormat
 where
     T: Serialize + Send + Sync + 'static,
 {
-    fn bytes_stream<'a, 'b>(
+    fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
@@ -70,7 +70,7 @@ impl<T> StreamingFormat<T> for JsonNewLineStreamFormat
 where
     T: Serialize + Send + Sync + 'static,
 {
-    fn bytes_stream<'a, 'b>(
+    fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
