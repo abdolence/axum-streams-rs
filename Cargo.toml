@@ -11,7 +11,7 @@ license = "Apache-2.0"
 name = "axum-streams"
 readme = "README.md"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
-version = "0.4.2"
+version = "0.5.0"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -22,7 +22,7 @@ path = "src/lib.rs"
 
 [dependencies]
 axum = { version = "0.5" }
-bytes = "1.1"
+bytes = "1.2"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 http = "0.2"
 mime = "0.3"
@@ -33,7 +33,7 @@ tokio-stream = { version = "0.1" }
 tokio-util = { version = "0.7" }
 futures = "0.3"
 csv = { version = "1.1", optional = true }
-prost = { version="0.10", optional = true }
+prost = { version= "0.11", optional = true }
 
 [features]
 default = []
@@ -50,7 +50,7 @@ tower-http = { version = "0.3", features = ["util", "map-response-body"] }
 tower-layer = "0.3"
 tower-service = "0.3"
 tokio = { version = "1.20", features = ["full"] }
-prost = { version= "0.10", features = ["prost-derive"] }
+prost = { version= "0.11", features = ["prost-derive"] }
 
 [[example]]
 name = "json-example"
