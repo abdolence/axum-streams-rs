@@ -4,7 +4,7 @@
 
 # axum streams for Rust
 
-Library provides HTTP response streaming support for [Axum web framework](https://github.com/tokio-rs/axum):
+Library provides HTTP response streaming support for [axum web framework](https://github.com/tokio-rs/axum):
 - JSON array stream format
 - JSON lines stream format
 - CSV stream
@@ -18,7 +18,7 @@ and want to avoid huge memory allocations to store on the server side.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.3", features=["json", "csv"] }
+axum-streams = { version = "0.4", features=["json", "csv", "protobuf"] }
 ```
 
 Example code:
@@ -58,6 +58,10 @@ To run example use:
 ```
 # cargo run --example json-example
 ```
+
+## Need client support?
+There are the same functionality for:
+- [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
 
 ## Licence
 Apache Software License (ASL)

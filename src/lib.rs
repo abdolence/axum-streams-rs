@@ -60,6 +60,10 @@
 /// }
 ///
 /// ```
+/// ## Need client support?
+/// There are the same functionality for:
+/// - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
+///
 mod stream_format;
 
 mod stream_body_with;

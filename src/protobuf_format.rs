@@ -25,7 +25,8 @@ where
         {
             let obj_vec = obj.encode_to_vec();
             let mut frame_vec = Vec::new();
-            prost::encoding::uint64::encode(1, &(obj_vec.len() as u64), &mut frame_vec);
+            let obj_len = (obj_vec.len() as u64);
+            prost::encoding::encode_varint(obj_len, &mut frame_vec);
             frame_vec.extend(obj_vec);
 
             Ok(frame_vec)
@@ -101,7 +102,8 @@ mod tests {
             .flat_map(|obj| {
                 let obj_vec = obj.encode_to_vec();
                 let mut frame_vec = Vec::new();
-                prost::encoding::uint64::encode(1, &(obj_vec.len() as u64), &mut frame_vec);
+                let obj_len = (obj_vec.len() as u64);
+                prost::encoding::encode_varint(obj_len, &mut frame_vec);
                 frame_vec.extend(obj_vec);
                 frame_vec
             })
