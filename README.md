@@ -60,7 +60,7 @@ To run example use:
 ```
 
 ## Need client support?
-There are the same functionality for:
+There is the same functionality for:
 - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
 
 ## Licence
