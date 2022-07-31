@@ -1,4 +1,4 @@
-[![Cargo](https://img.shields.io/crates/v/axum-streams.svg)](https://crates.io/crates/axums-streams)
+[![Cargo](https://img.shields.io/crates/v/axum-streams.svg)](https://crates.io/crates/axum-streams)
 ![tests and formatting](https://github.com/abdolence/axum-streams-rs/workflows/tests%20&amp;%20formatting/badge.svg)
 ![security audit](https://github.com/abdolence/axum-streams-rs/workflows/security%20audit/badge.svg)
 
