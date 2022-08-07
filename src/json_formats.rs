@@ -1,8 +1,10 @@
 use crate::stream_format::StreamingFormat;
+use bytes::{BufMut, BytesMut};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
 use serde::Serialize;
+use std::io::Write;
 
 pub struct JsonArrayStreamFormat;
 
@@ -22,16 +24,14 @@ where
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
             stream.enumerate().map(|(index, obj)| {
-                let mut output = vec![];
-                serde_json::to_vec::<T>(&obj)
-                    .map(|obj_vec| {
-                        if index != 0 {
-                            output.extend(JSON_ARRAY_SEP_BYTES)
-                        }
-                        output.extend(obj_vec);
-                        axum::body::Bytes::from(output)
-                    })
-                    .map_err(axum::Error::new)
+                let mut buf = BytesMut::new().writer();
+                if index != 0 {
+                    buf.write_all(JSON_ARRAY_SEP_BYTES).unwrap();
+                }
+                match serde_json::to_writer(&mut buf, &obj) {
+                    Ok(_) => Ok(buf.into_inner().freeze()),
+                    Err(e) => Err(axum::Error::new(e)),
+                }
             })
         });
 
@@ -76,16 +76,14 @@ where
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
             stream.enumerate().map(|(index, obj)| {
-                let mut output = vec![];
-                serde_json::to_vec::<T>(&obj)
-                    .map(|obj_vec| {
-                        if index != 0 {
-                            output.extend(JSON_NL_SEP_BYTES)
-                        }
-                        output.extend(obj_vec);
-                        axum::body::Bytes::from(output)
-                    })
-                    .map_err(axum::Error::new)
+                let mut buf = BytesMut::new().writer();
+                if index != 0 {
+                    buf.write_all(JSON_NL_SEP_BYTES).unwrap();
+                }
+                match serde_json::to_writer(&mut buf, &obj) {
+                    Ok(_) => Ok(buf.into_inner().freeze()),
+                    Err(e) => Err(axum::Error::new(e)),
+                }
             })
         });
 
