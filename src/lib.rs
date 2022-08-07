@@ -44,14 +44,14 @@
 //!
 //! // Route implementation:
 //! async fn test_json_array_stream() -> impl IntoResponse {
-//!     StreamBodyWith::json_array(my_source_stream())
+//!     StreamBodyAs::json_array(my_source_stream())
 //! }
 //! async fn test_json_nl_stream() -> impl IntoResponse {
-//!     StreamBodyWith::json_nl(my_source_stream())
+//!     StreamBodyAs::json_nl(my_source_stream())
 //! }
 //!
 //! async fn test_csv_stream() -> impl IntoResponse {
-//!     StreamBodyWith::csv(my_source_stream())
+//!     StreamBodyAs::csv(my_source_stream())
 //!     // Which is the same as:
 //!     // StreamBodyWith::new(CsvStreamFormat::new(
 //!     //    true, // with_header
@@ -68,7 +68,10 @@
 mod stream_format;
 
 mod stream_body_with;
-pub use self::stream_body_with::StreamBodyWith;
+pub use self::stream_body_with::StreamBodyAs;
+
+// For compatibility reasons
+pub type StreamBodyWith<'a> = StreamBodyAs<'a>;
 
 #[cfg(feature = "json")]
 mod json_formats;

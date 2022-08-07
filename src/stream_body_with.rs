@@ -7,18 +7,18 @@ use std::fmt::Formatter;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub struct StreamBodyWith<'a> {
+pub struct StreamBodyAs<'a> {
     stream: BoxStream<'a, Result<axum::body::Bytes, axum::Error>>,
     trailers: Option<HeaderMap>,
 }
 
-impl<'a> std::fmt::Debug for StreamBodyWith<'a> {
+impl<'a> std::fmt::Debug for StreamBodyAs<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "StreamBodyWithFormat")
     }
 }
 
-impl<'a> StreamBodyWith<'a> {
+impl<'a> StreamBodyAs<'a> {
     /// Create a new `StreamBodyWith` providing a stream of your objects in the specified format.
     pub fn new<T, FMT>(stream_format: FMT, stream: BoxStream<'a, T>) -> Self
     where
@@ -31,13 +31,13 @@ impl<'a> StreamBodyWith<'a> {
     }
 }
 
-impl IntoResponse for StreamBodyWith<'static> {
+impl IntoResponse for StreamBodyAs<'static> {
     fn into_response(self) -> Response {
         Response::new(axum::body::boxed(self))
     }
 }
 
-impl<'a> HttpBody for StreamBodyWith<'a> {
+impl<'a> HttpBody for StreamBodyAs<'a> {
     type Data = axum::body::Bytes;
     type Error = axum::Error;
 

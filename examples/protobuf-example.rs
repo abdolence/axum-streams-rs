@@ -29,7 +29,7 @@ fn source_test_stream() -> BoxStream<'static, MyTestStructure> {
 }
 
 async fn test_protobuf_stream() -> impl IntoResponse {
-    StreamBodyWith::protobuf(source_test_stream())
+    StreamBodyAs::protobuf(source_test_stream())
 }
 
 #[tokio::main]

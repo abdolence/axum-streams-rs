@@ -39,15 +39,15 @@ fn source_test_stream() -> BoxStream<'static, MyTestStructure> {
 }
 
 async fn test_json_array_stream() -> impl IntoResponse {
-  StreamBodyWith::json_array(source_test_stream())
+  StreamBodyAs::json_array(source_test_stream())
 }
 
 async fn test_json_nl_stream() -> impl IntoResponse {
-  StreamBodyWith::json_nl(source_test_stream())
+  StreamBodyAs::json_nl(source_test_stream())
 }
 
 async fn test_csv_stream() -> impl IntoResponse {
-    StreamBodyWith::csv(source_test_stream())
+  StreamBodyAs::csv(source_test_stream())
 }
 
 ```

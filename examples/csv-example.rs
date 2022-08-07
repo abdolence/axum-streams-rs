@@ -29,7 +29,7 @@ fn source_test_stream() -> BoxStream<'static, MyTestStructure> {
 }
 
 async fn test_csv_stream() -> impl IntoResponse {
-    StreamBodyWith::csv(source_test_stream())
+    StreamBodyAs::csv(source_test_stream())
 
     // Which is the same as:
     // StreamBodyWith::new(

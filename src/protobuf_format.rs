@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<'a> crate::StreamBodyWith<'a> {
+impl<'a> crate::StreamBodyAs<'a> {
     pub fn protobuf<T>(stream: BoxStream<'a, T>) -> Self
     where
         T: prost::Message + Send + Sync + 'static,
@@ -65,7 +65,7 @@ impl<'a> crate::StreamBodyWith<'a> {
 mod tests {
     use super::*;
     use crate::test_client::*;
-    use crate::StreamBodyWith;
+    use crate::StreamBodyAs;
     use axum::{routing::*, Router};
     use futures_util::stream;
     use prost::Message;
@@ -92,7 +92,7 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async { StreamBodyWith::new(ProtobufStreamFormat::new(), test_stream) }),
+            get(|| async { StreamBodyAs::new(ProtobufStreamFormat::new(), test_stream) }),
         );
 
         let client = TestClient::new(app);
