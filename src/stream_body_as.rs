@@ -1,6 +1,7 @@
 use crate::stream_format::StreamingFormat;
 use axum::body::HttpBody;
 use axum::response::{IntoResponse, Response};
+use futures::Stream;
 use futures_util::stream::BoxStream;
 use http::HeaderMap;
 use std::fmt::Formatter;
@@ -20,12 +21,13 @@ impl<'a> std::fmt::Debug for StreamBodyAs<'a> {
 
 impl<'a> StreamBodyAs<'a> {
     /// Create a new `StreamBodyWith` providing a stream of your objects in the specified format.
-    pub fn new<T, FMT>(stream_format: FMT, stream: BoxStream<'a, T>) -> Self
+    pub fn new<S, T, FMT>(stream_format: FMT, stream: S) -> Self
     where
         FMT: StreamingFormat<T>,
+        S: Stream<Item = T> + 'a + Send,
     {
         Self {
-            stream: stream_format.to_bytes_stream(stream),
+            stream: stream_format.to_bytes_stream(Box::pin(stream)),
             trailers: stream_format.http_response_trailers(),
         }
     }
@@ -45,7 +47,6 @@ impl<'a> HttpBody for StreamBodyAs<'a> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        use futures_util::Stream;
         Pin::new(&mut self.stream).poll_next(cx)
     }
 

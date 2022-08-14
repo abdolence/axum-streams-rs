@@ -1,4 +1,5 @@
 use crate::stream_format::StreamingFormat;
+use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
@@ -64,9 +65,10 @@ where
 }
 
 impl<'a> crate::StreamBodyAs<'a> {
-    pub fn csv<T>(stream: BoxStream<'a, T>) -> Self
+    pub fn csv<S, T>(stream: S) -> Self
     where
         T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
     {
         Self::new(CsvStreamFormat::new(false, b','), stream)
     }

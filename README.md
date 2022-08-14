@@ -29,13 +29,13 @@ struct MyTestStructure {
   some_test_field: String
 }
 
-fn source_test_stream() -> BoxStream<'static, MyTestStructure> {
+fn my_source_stream() -> impl Stream<Item=MyTestStructure> {
   // Simulating a stream with a plain vector and throttling to show how it works
-  Box::pin(stream::iter(vec![
+  stream::iter(vec![
     MyTestStructure {
       some_test_field: "test1".to_string()
     }; 1000
-  ]).throttle(std::time::Duration::from_millis(50)))
+  ]).throttle(std::time::Duration::from_millis(50))
 }
 
 async fn test_json_array_stream() -> impl IntoResponse {

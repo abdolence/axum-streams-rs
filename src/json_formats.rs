@@ -1,5 +1,6 @@
 use crate::stream_format::StreamingFormat;
 use bytes::{BufMut, BytesMut};
+use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
@@ -107,16 +108,18 @@ const JSON_ARRAY_SEP_BYTES: &[u8] = ",".as_bytes();
 const JSON_NL_SEP_BYTES: &[u8] = "\n".as_bytes();
 
 impl<'a> crate::StreamBodyAs<'a> {
-    pub fn json_array<T>(stream: BoxStream<'a, T>) -> Self
+    pub fn json_array<S, T>(stream: S) -> Self
     where
         T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
     {
         Self::new(JsonArrayStreamFormat::new(), stream)
     }
 
-    pub fn json_nl<T>(stream: BoxStream<'a, T>) -> Self
+    pub fn json_nl<S, T>(stream: S) -> Self
     where
         T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
     {
         Self::new(JsonNewLineStreamFormat::new(), stream)
     }

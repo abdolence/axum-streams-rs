@@ -1,4 +1,5 @@
 use crate::stream_format::StreamingFormat;
+use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
@@ -53,9 +54,10 @@ where
 }
 
 impl<'a> crate::StreamBodyAs<'a> {
-    pub fn protobuf<T>(stream: BoxStream<'a, T>) -> Self
+    pub fn protobuf<S, T>(stream: S) -> Self
     where
         T: prost::Message + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
     {
         Self::new(ProtobufStreamFormat::new(), stream)
     }

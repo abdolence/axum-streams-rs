@@ -16,13 +16,13 @@
 //! # Example
 //!
 //! ```rust
-//! use futures_util::stream::BoxStream;
 //! use axum::{
 //!     Router,
 //!     routing::get,
 //!     http::{StatusCode, header::CONTENT_TYPE},
 //!     response::{Response, IntoResponse},
 //! };
+//! use futures::Stream;
 //! use axum_streams::*;
 //! use serde::Serialize;
 //!
@@ -32,14 +32,14 @@
 //! }
 //!
 //! // Your possibly stream of objects
-//! fn my_source_stream() -> BoxStream<'static, MyTestStructure> {
+//! fn my_source_stream() -> impl Stream<Item=MyTestStructure> {
 //!     // Simulating a stream with a plain vector and throttling to show how it works
 //!     use tokio_stream::StreamExt;
-//!     Box::pin(futures::stream::iter(vec![
+//!     futures::stream::iter(vec![
 //!         MyTestStructure {
 //!             some_test_field: "test1".to_string()
 //!         }; 1000
-//!     ]).throttle(std::time::Duration::from_millis(50)))
+//!     ]).throttle(std::time::Duration::from_millis(50))
 //! }
 //!
 //! // Route implementation:
@@ -67,11 +67,8 @@
 
 mod stream_format;
 
-mod stream_body_with;
-pub use self::stream_body_with::StreamBodyAs;
-
-// For compatibility reasons
-pub type StreamBodyWith<'a> = StreamBodyAs<'a>;
+mod stream_body_as;
+pub use self::stream_body_as::StreamBodyAs;
 
 #[cfg(feature = "json")]
 mod json_formats;
