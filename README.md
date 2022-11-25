@@ -18,8 +18,17 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.7", features=["json", "csv", "protobuf"] }
+axum-streams = { version = "0.8", features=["json", "csv", "protobuf"] }
 ```
+
+## Compatibility matrix
+
+| axum | axum-streams |
+|------|--------------|
+| 0.6  | 0.8          |
+| 0.5  | 0.7          |
+
+
 
 Example code:
 ```rust

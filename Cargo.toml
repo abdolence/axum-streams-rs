@@ -11,7 +11,7 @@ license = "Apache-2.0"
 name = "axum-streams"
 readme = "README.md"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
-version = "0.7.0"
+version = "0.8.0"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -21,7 +21,7 @@ name = "axum_streams"
 path = "src/lib.rs"
 
 [dependencies]
-axum = { version = "0.5" }
+axum = { version = "0.6" }
 bytes = "1.3"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 http = "0.2"
