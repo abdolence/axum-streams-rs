@@ -65,7 +65,7 @@ All examples available at [examples](examples) directory.
 
 To run example use:
 ```
-# cargo run --example json-example
+# cargo run --example json-example --features json
 ```
 
 ## Need client support?
