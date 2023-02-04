@@ -65,6 +65,8 @@
 //! - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
 //!
 
+#![allow(clippy::new_without_default, clippy::needless_lifetimes)]
+
 mod stream_format;
 
 mod stream_body_as;
