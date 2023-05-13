@@ -84,6 +84,11 @@ mod csv_format;
 #[cfg(feature = "csv")]
 pub use csv_format::CsvStreamFormat;
 
+#[cfg(feature = "text")]
+mod text_format;
+#[cfg(feature = "text")]
+pub use text_format::TextStreamFormat;
+
 #[cfg(feature = "protobuf")]
 mod protobuf_format;
 #[cfg(feature = "protobuf")]
