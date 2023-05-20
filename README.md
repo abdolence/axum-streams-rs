@@ -9,6 +9,7 @@ Library provides HTTP response streaming support for [axum web framework](https:
 - JSON lines stream format
 - CSV stream
 - Protobuf len-prefixed stream format
+- Text stream
 
 This type of responses are useful when you are reading huge stream of objects from some source (such as database, file, etc)
 and want to avoid huge memory allocation.
@@ -18,7 +19,7 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.8", features=["json", "csv", "protobuf"] }
+axum-streams = { version = "0.8", features=["json", "csv", "protobuf", "text"] }
 ```
 
 ## Compatibility matrix
@@ -57,6 +58,10 @@ async fn test_json_nl_stream() -> impl IntoResponse {
 
 async fn test_csv_stream() -> impl IntoResponse {
   StreamBodyAs::csv(source_test_stream())
+}
+
+async fn test_text_stream() -> impl IntoResponse {
+  StreamBodyAs::text(source_test_stream())
 }
 
 ```

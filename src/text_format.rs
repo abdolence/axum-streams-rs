@@ -12,15 +12,12 @@ impl TextStreamFormat {
     }
 }
 
-impl StreamingFormat<String> for TextStreamFormat
-
-{
+impl StreamingFormat<String> for TextStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, String>,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        fn write_text_record(obj: String) -> Result<Vec<u8>, axum::Error>
-        {
+        fn write_text_record(obj: String) -> Result<Vec<u8>, axum::Error> {
             let obj_vec = obj.as_bytes().to_vec();
             Ok(obj_vec)
         }
@@ -47,8 +44,8 @@ impl StreamingFormat<String> for TextStreamFormat
 
 impl<'a> crate::StreamBodyAs<'a> {
     pub fn text<S>(stream: S) -> Self
-        where
-            S: Stream<Item=String> + 'a + Send,
+    where
+        S: Stream<Item = String> + 'a + Send,
     {
         Self::new(TextStreamFormat::new(), stream)
     }

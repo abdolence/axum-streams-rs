@@ -8,14 +8,13 @@ use tokio_stream::StreamExt;
 
 use axum_streams::*;
 
-
-fn source_test_stream() -> impl Stream<Item=String> {
+fn source_test_stream() -> impl Stream<Item = String> {
     // Simulating a stream with a plain vector and throttling to show how it works
     stream::iter(vec![
         "苟利国家生死以，岂因祸福避趋之？".to_string();
         1000
     ])
-        .throttle(std::time::Duration::from_millis(50))
+    .throttle(std::time::Duration::from_millis(50))
 }
 
 async fn test_text_stream() -> impl IntoResponse {
