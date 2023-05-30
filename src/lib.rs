@@ -82,6 +82,8 @@ pub use json_formats::JsonNewLineStreamFormat;
 #[cfg(feature = "csv")]
 mod csv_format;
 #[cfg(feature = "csv")]
+pub use csv::{QuoteStyle, Terminator};
+#[cfg(feature = "csv")]
 pub use csv_format::CsvStreamFormat;
 
 #[cfg(feature = "text")]
