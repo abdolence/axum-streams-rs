@@ -195,6 +195,12 @@ mod tests {
             .add("\n");
 
         let res = client.get("/").send().await.unwrap();
+        assert_eq!(
+            res.headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok()),
+            Some("text/csv")
+        );
         let body = res.text().await.unwrap();
 
         assert_eq!(body, expected_csv);

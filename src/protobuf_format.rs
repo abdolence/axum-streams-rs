@@ -112,6 +112,12 @@ mod tests {
             .collect();
 
         let res = client.get("/").send().await.unwrap();
+        assert_eq!(
+            res.headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok()),
+            Some("application/x-protobuf-stream")
+        );
         let body = res.bytes().await.unwrap().to_vec();
 
         assert_eq!(body, expected_proto_buf);

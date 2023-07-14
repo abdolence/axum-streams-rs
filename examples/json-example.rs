@@ -20,7 +20,7 @@ fn source_test_stream() -> impl Stream<Item = MyTestStructure> {
         MyTestStructure {
             some_test_field: "test1".to_string()
         };
-        1000
+        100
     ])
     .throttle(std::time::Duration::from_millis(50))
 }
