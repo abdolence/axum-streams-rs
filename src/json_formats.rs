@@ -158,6 +158,13 @@ mod tests {
 
         let expected_json = serde_json::to_string(&test_stream_vec).unwrap();
         let res = client.get("/").send().await.unwrap();
+        assert_eq!(
+            res.headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok()),
+            Some("application/json")
+        );
+
         let body = res.text().await.unwrap();
 
         assert_eq!(body, expected_json);
@@ -193,6 +200,13 @@ mod tests {
             .join("\n");
 
         let res = client.get("/").send().await.unwrap();
+        assert_eq!(
+            res.headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok()),
+            Some("application/jsonstream")
+        );
+
         let body = res.text().await.unwrap();
 
         assert_eq!(body, expected_json);

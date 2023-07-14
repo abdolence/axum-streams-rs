@@ -31,11 +31,24 @@ impl<'a> StreamBodyAs<'a> {
             trailers: stream_format.http_response_trailers(),
         }
     }
+
+    pub fn headers(mut self, headers: HeaderMap) -> Self {
+        self.trailers = Some(headers);
+        self
+    }
 }
 
 impl IntoResponse for StreamBodyAs<'static> {
-    fn into_response(self) -> Response {
-        Response::new(axum::body::boxed(self))
+    fn into_response(mut self) -> Response {
+        let headers = if let Some(trailers) = self.trailers.take() {
+            trailers
+        } else {
+            HeaderMap::new()
+        };
+
+        let mut response = Response::new(axum::body::boxed(self));
+        *response.headers_mut() = headers;
+        response
     }
 }
 
