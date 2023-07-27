@@ -36,7 +36,7 @@ impl StreamingFormat<String> for TextStreamFormat {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
-            "text/plain; charset=utf-8".parse().unwrap(),
+            http::header::HeaderValue::from_static("text/plain; charset=utf-8"),
         );
         Some(header_map)
     }

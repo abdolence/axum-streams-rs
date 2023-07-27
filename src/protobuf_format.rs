@@ -47,7 +47,7 @@ where
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
-            "application/x-protobuf-stream".parse().unwrap(),
+            http::header::HeaderValue::from_static("application/x-protobuf-stream"),
         );
         Some(header_map)
     }
