@@ -133,7 +133,10 @@ where
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
-        header_map.insert(http::header::CONTENT_TYPE, "text/csv".parse().unwrap());
+        header_map.insert(
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("text/csv"),
+        );
         Some(header_map)
     }
 }

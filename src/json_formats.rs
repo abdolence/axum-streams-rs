@@ -26,12 +26,22 @@ where
         let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
             stream.enumerate().map(|(index, obj)| {
                 let mut buf = BytesMut::new().writer();
-                if index != 0 {
-                    buf.write_all(JSON_ARRAY_SEP_BYTES).unwrap();
-                }
-                match serde_json::to_writer(&mut buf, &obj) {
-                    Ok(_) => Ok(buf.into_inner().freeze()),
-                    Err(e) => Err(axum::Error::new(e)),
+
+                let sep_write_res = if index != 0 {
+                    buf.write_all(JSON_ARRAY_SEP_BYTES)
+                        .map_err(axum::Error::new)
+                } else {
+                    Ok(())
+                };
+
+                match sep_write_res {
+                    Ok(_) => {
+                        match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
+                            Ok(_) => Ok(buf.into_inner().freeze()),
+                            Err(e) => Err(e),
+                        }
+                    }
+                    Err(e) => Err(e),
                 }
             })
         });
@@ -53,7 +63,7 @@ where
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
-            "application/json".parse().unwrap(),
+            http::header::HeaderValue::from_static("application/json"),
         );
         Some(header_map)
     }
@@ -76,14 +86,14 @@ where
         stream: BoxStream<'b, T>,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
-            stream.enumerate().map(|(index, obj)| {
+            stream.map(|obj| {
                 let mut buf = BytesMut::new().writer();
-                if index != 0 {
-                    buf.write_all(JSON_NL_SEP_BYTES).unwrap();
-                }
-                match serde_json::to_writer(&mut buf, &obj) {
-                    Ok(_) => Ok(buf.into_inner().freeze()),
-                    Err(e) => Err(axum::Error::new(e)),
+                match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
+                    Ok(_) => match buf.write_all(JSON_NL_SEP_BYTES).map_err(axum::Error::new) {
+                        Ok(_) => Ok(buf.into_inner().freeze()),
+                        Err(e) => Err(e),
+                    },
+                    Err(e) => Err(e),
                 }
             })
         });
@@ -95,7 +105,7 @@ where
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
-            "application/jsonstream".parse().unwrap(),
+            http::header::HeaderValue::from_static("application/jsonstream"),
         );
         Some(header_map)
     }
@@ -197,7 +207,8 @@ mod tests {
             .iter()
             .map(|item| serde_json::to_string(item).unwrap())
             .collect::<Vec<String>>()
-            .join("\n");
+            .join("\n")
+            + "\n";
 
         let res = client.get("/").send().await.unwrap();
         assert_eq!(
