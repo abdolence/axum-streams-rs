@@ -3,6 +3,7 @@ use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
+use http_body::Frame;
 
 pub struct TextStreamFormat;
 
@@ -16,7 +17,7 @@ impl StreamingFormat<String> for TextStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, String>,
-    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
+    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
         fn write_text_record(obj: String) -> Result<Vec<u8>, axum::Error> {
             let obj_vec = obj.as_bytes().to_vec();
             Ok(obj_vec)
