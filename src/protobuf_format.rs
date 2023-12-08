@@ -3,6 +3,7 @@ use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
+use http_body::Frame;
 
 pub struct ProtobufStreamFormat;
 
@@ -19,7 +20,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
+    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
         fn write_protobuf_record<T>(obj: T) -> Result<Vec<u8>, axum::Error>
         where
             T: prost::Message,
@@ -33,10 +34,12 @@ where
             Ok(frame_vec)
         }
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
             stream.map(move |obj| {
                 let write_protobuf_res = write_protobuf_record(obj);
-                write_protobuf_res.map(axum::body::Bytes::from)
+                write_protobuf_res
+                    .map(axum::body::Bytes::from)
+                    .map(Frame::data)
             })
         });
 
