@@ -1,10 +1,10 @@
 use axum::response::IntoResponse;
 use axum::routing::*;
 use axum::Router;
-use std::net::SocketAddr;
 
 use futures::prelude::*;
 use serde::{Deserialize, Serialize};
+use tokio::net::TcpListener;
 use tokio_stream::StreamExt;
 
 use axum_streams::*;
@@ -41,10 +41,7 @@ async fn main() {
         .route("/json-array-stream", get(test_json_array_stream))
         .route("/json-nl-stream", get(test_json_nl_stream));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
