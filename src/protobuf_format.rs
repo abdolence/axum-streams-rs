@@ -100,7 +100,7 @@ mod tests {
             get(|| async { StreamBodyAs::new(ProtobufStreamFormat::new(), test_stream) }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_proto_buf: Vec<u8> = test_stream_vec
             .iter()

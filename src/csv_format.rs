@@ -190,7 +190,7 @@ mod tests {
             }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_csv = test_stream_vec
             .iter()

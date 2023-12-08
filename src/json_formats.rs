@@ -165,7 +165,7 @@ mod tests {
             get(|| async { StreamBodyAs::new(JsonArrayStreamFormat::new(), test_stream) }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_json = serde_json::to_string(&test_stream_vec).unwrap();
         let res = client.get("/").send().await.unwrap();
@@ -202,7 +202,7 @@ mod tests {
             get(|| async { StreamBodyAs::new(JsonNewLineStreamFormat::new(), test_stream) }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_json = test_stream_vec
             .iter()
