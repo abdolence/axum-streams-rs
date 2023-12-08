@@ -1,9 +1,9 @@
 use axum::response::IntoResponse;
 use axum::routing::*;
 use axum::Router;
-use std::net::SocketAddr;
 
 use futures::prelude::*;
+use tokio::net::TcpListener;
 use tokio_stream::StreamExt;
 
 use axum_streams::*;
@@ -28,10 +28,7 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/text-stream", get(test_text_stream));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }

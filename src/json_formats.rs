@@ -4,6 +4,7 @@ use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
+use http_body::Frame;
 use serde::Serialize;
 use std::io::Write;
 
@@ -22,8 +23,8 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
+        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
             stream.enumerate().map(|(index, obj)| {
                 let mut buf = BytesMut::new().writer();
 
@@ -37,7 +38,7 @@ where
                 match sep_write_res {
                     Ok(_) => {
                         match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
-                            Ok(_) => Ok(buf.into_inner().freeze()),
+                            Ok(_) => Ok(Frame::data(buf.into_inner().freeze())),
                             Err(e) => Err(e),
                         }
                     }
@@ -46,14 +47,14 @@ where
             })
         });
 
-        let prepend_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
+        let prepend_stream: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> =
             Box::pin(futures_util::stream::once(futures_util::future::ready(
-                Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_BEGIN_BYTES)),
+                Ok::<_, axum::Error>(Frame::data(axum::body::Bytes::from(JSON_ARRAY_BEGIN_BYTES))),
             )));
 
-        let append_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
+        let append_stream: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> =
             Box::pin(futures_util::stream::once(futures_util::future::ready(
-                Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_END_BYTES)),
+                Ok::<_, axum::Error>(Frame::data(axum::body::Bytes::from(JSON_ARRAY_END_BYTES))),
             )));
 
         Box::pin(prepend_stream.chain(stream_bytes.chain(append_stream)))
@@ -84,13 +85,13 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
+        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
             stream.map(|obj| {
                 let mut buf = BytesMut::new().writer();
                 match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
                     Ok(_) => match buf.write_all(JSON_NL_SEP_BYTES).map_err(axum::Error::new) {
-                        Ok(_) => Ok(buf.into_inner().freeze()),
+                        Ok(_) => Ok(Frame::data(buf.into_inner().freeze())),
                         Err(e) => Err(e),
                     },
                     Err(e) => Err(e),
@@ -164,7 +165,7 @@ mod tests {
             get(|| async { StreamBodyAs::new(JsonArrayStreamFormat::new(), test_stream) }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_json = serde_json::to_string(&test_stream_vec).unwrap();
         let res = client.get("/").send().await.unwrap();
@@ -201,7 +202,7 @@ mod tests {
             get(|| async { StreamBodyAs::new(JsonNewLineStreamFormat::new(), test_stream) }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_json = test_stream_vec
             .iter()

@@ -3,6 +3,7 @@ use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
+use http_body::Frame;
 
 pub struct TextStreamFormat;
 
@@ -16,17 +17,14 @@ impl StreamingFormat<String> for TextStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, String>,
-    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
+    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
         fn write_text_record(obj: String) -> Result<Vec<u8>, axum::Error> {
             let obj_vec = obj.as_bytes().to_vec();
             Ok(obj_vec)
         }
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
-            stream.map(move |obj| {
-                let write_text_res = write_text_record(obj);
-                write_text_res.map(axum::body::Bytes::from)
-            })
+        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
+            stream.map(move |obj| write_text_record(obj).map(|data| Frame::data(data.into())))
         });
 
         Box::pin(stream_bytes)
@@ -88,7 +86,7 @@ mod tests {
             get(|| async { StreamBodyAs::new(TextStreamFormat::new(), test_stream) }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_text_buf: Vec<u8> = test_stream_vec
             .iter()

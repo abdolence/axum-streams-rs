@@ -1,28 +1,30 @@
 use axum::response::IntoResponse;
 use axum::routing::*;
 use axum::Router;
-use std::net::SocketAddr;
 
 use futures::prelude::*;
 use serde::{Deserialize, Serialize};
+use tokio::net::TcpListener;
 use tokio_stream::StreamExt;
 
 use axum_streams::*;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct MyTestStructure {
-    some_test_field: String,
+    some_test_field1: String,
+    some_test_field2: String,
 }
 
 fn source_test_stream() -> impl Stream<Item = MyTestStructure> {
     // Simulating a stream with a plain vector and throttling to show how it works
     stream::iter(vec![
         MyTestStructure {
-            some_test_field: "test1".to_string()
+            some_test_field1: "test1".to_string(),
+            some_test_field2: "test2".to_string()
         };
         1000
     ])
-    .throttle(std::time::Duration::from_millis(50))
+    .throttle(std::time::Duration::from_millis(500))
 }
 
 async fn test_csv_stream() -> impl IntoResponse {
@@ -45,10 +47,7 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/csv-stream", get(test_csv_stream));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }

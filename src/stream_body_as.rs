@@ -1,15 +1,16 @@
 use crate::stream_format::StreamingFormat;
-use axum::body::HttpBody;
+use axum::body::{Body, HttpBody};
 use axum::response::{IntoResponse, Response};
 use futures::Stream;
 use futures_util::stream::BoxStream;
 use http::HeaderMap;
+use http_body::Frame;
 use std::fmt::Formatter;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 pub struct StreamBodyAs<'a> {
-    stream: BoxStream<'a, Result<axum::body::Bytes, axum::Error>>,
+    stream: BoxStream<'a, Result<Frame<axum::body::Bytes>, axum::Error>>,
     trailers: Option<HeaderMap>,
 }
 
@@ -46,7 +47,7 @@ impl IntoResponse for StreamBodyAs<'static> {
             HeaderMap::new()
         };
 
-        let mut response = Response::new(axum::body::boxed(self));
+        let mut response: Response<Body> = Response::new(Body::new(self));
         *response.headers_mut() = headers;
         response
     }
@@ -56,17 +57,10 @@ impl<'a> HttpBody for StreamBodyAs<'a> {
     type Data = axum::body::Bytes;
     type Error = axum::Error;
 
-    fn poll_data(
+    fn poll_frame(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         Pin::new(&mut self.stream).poll_next(cx)
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(self.trailers.clone()))
     }
 }

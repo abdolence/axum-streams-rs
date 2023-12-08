@@ -3,6 +3,7 @@ use futures::Stream;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use http::HeaderMap;
+use http_body::Frame;
 use serde::Serialize;
 
 pub struct CsvStreamFormat {
@@ -96,7 +97,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
+    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
         let stream_with_header = self.has_headers;
         let stream_delimiter = self.delimiter;
         let stream_flexible = self.flexible;
@@ -106,7 +107,7 @@ where
         let stream_escape = self.escape;
         let terminator = self.terminator;
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
             stream.enumerate().map(move |(index, obj)| {
                 let mut writer = csv::WriterBuilder::new()
                     .has_headers(index == 0 && stream_with_header)
@@ -125,6 +126,7 @@ where
                     .into_inner()
                     .map_err(axum::Error::new)
                     .map(axum::body::Bytes::from)
+                    .map(Frame::data)
             })
         });
 
@@ -188,7 +190,7 @@ mod tests {
             }),
         );
 
-        let client = TestClient::new(app);
+        let client = TestClient::new(app).await;
 
         let expected_csv = test_stream_vec
             .iter()

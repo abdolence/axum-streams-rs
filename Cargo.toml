@@ -21,10 +21,11 @@ name = "axum_streams"
 path = "src/lib.rs"
 
 [dependencies]
-axum = { version = "0.6" }
+axum = { version = "0.7" }
 bytes = "1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
-http = "0.2"
+http = "1"
+http-body = "1"
 mime = "0.3"
 tokio = "1"
 serde = { version = "1", features = ["serde_derive"], optional = true }
@@ -44,10 +45,10 @@ text = []
 
 [dev-dependencies]
 futures = "0.3"
-hyper = "0.14"
+hyper = "1"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "multipart"] }
 tower = { version = "0.4", default-features = false, features = ["util", "make"] }
-tower-http = { version = "0.4", features = ["util", "map-response-body"] }
+tower-http = { version = "0.5", features = ["util", "map-response-body"] }
 tower-layer = "0.3"
 tower-service = "0.3"
 tokio = { version = "1", features = ["full"] }

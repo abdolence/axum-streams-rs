@@ -1,12 +1,9 @@
-use axum::body::HttpBody;
-use http::Request;
-
+use axum::Router;
 use reqwest::RequestBuilder;
-use std::net::{SocketAddr, TcpListener};
-use tower::make::Shared;
-use tower_service::Service;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 
-// This class is a copy from Axum project (https://github.com/tokio-rs/axum), since
+// This class was originally a copy from Axum project (https://github.com/tokio-rs/axum), since
 // this not available for external crates to use in tests
 pub(crate) struct TestClient {
     client: reqwest::Client,
@@ -14,26 +11,15 @@ pub(crate) struct TestClient {
 }
 
 impl TestClient {
-    pub(crate) fn new<S, ResBody>(svc: S) -> Self
-    where
-        S: Service<Request<hyper::body::Body>, Response = http::Response<ResBody>>
-            + Clone
-            + Send
-            + 'static,
-        ResBody: HttpBody + Send + 'static,
-        ResBody::Data: Send,
-        ResBody::Error: Into<axum::BoxError>,
-        S::Future: Send,
-        S::Error: Into<axum::BoxError>,
-    {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("Could not bind ephemeral socket");
-        let addr = listener.local_addr().unwrap();
+    pub(crate) async fn new(router: Router) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("Could not bind ephemeral socket");
+        let addr = listener.local_addr().unwrap().clone();
         println!("Listening on {}", addr);
 
         tokio::spawn(async move {
-            let server = hyper::server::Server::from_tcp(listener)
-                .unwrap()
-                .serve(Shared::new(svc));
+            let server = axum::serve(listener, router);
             server.await.expect("server error");
         });
 
