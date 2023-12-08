@@ -6,6 +6,7 @@
 
 Library provides HTTP response streaming support for [axum web framework](https://github.com/tokio-rs/axum):
 - JSON array stream format
+  - Support for simple envelopes structures when you need to include your array inside some object (only for first level) 
 - JSON lines stream format
 - CSV stream
 - Protobuf len-prefixed stream format
@@ -19,7 +20,7 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.11", features=["json", "csv", "protobuf", "text"] }
+axum-streams = { version = "0.12", features=["json", "csv", "protobuf", "text"] }
 ```
 
 ## Compatibility matrix
