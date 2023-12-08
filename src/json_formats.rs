@@ -356,4 +356,66 @@ mod tests {
 
         assert_eq!(body, expected_json);
     }
+
+    #[tokio::test]
+    async fn serialize_json_array_stream_with_empty_envelope_format() {
+        #[derive(Debug, Clone, Serialize)]
+        struct TestItemStructure {
+            foo: String,
+        }
+
+        #[derive(Debug, Clone, Serialize)]
+        struct TestEnvelopeStructure {
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            my_array: Vec<TestItemStructure>,
+        }
+
+        #[derive(Debug, Clone, Serialize)]
+        struct TestEmptyEnvelopeStructure {
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            my_array: Vec<TestItemStructure>,
+        }
+
+        let test_stream_vec = vec![
+            TestItemStructure {
+                foo: "bar".to_string()
+            };
+            7
+        ];
+
+        let test_stream = Box::pin(stream::iter(test_stream_vec.clone()));
+
+        let test_envelope = TestEnvelopeStructure {
+            my_array: Vec::new(),
+        };
+
+        let app = Router::new().route(
+            "/",
+            get(|| async {
+                StreamBodyAs::new(
+                    JsonArrayStreamFormat::with_envelope(test_envelope, "my_array"),
+                    test_stream,
+                )
+            }),
+        );
+
+        let client = TestClient::new(app).await;
+
+        let expected_envelope = TestEnvelopeStructure {
+            my_array: test_stream_vec.clone(),
+        };
+
+        let expected_json = serde_json::to_string(&expected_envelope).unwrap();
+        let res = client.get("/").send().await.unwrap();
+        assert_eq!(
+            res.headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok()),
+            Some("application/json")
+        );
+
+        let body = res.text().await.unwrap();
+
+        assert_eq!(body, expected_json);
+    }
 }
