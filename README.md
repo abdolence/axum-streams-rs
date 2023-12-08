@@ -79,6 +79,54 @@ To run example use:
 There is the same functionality for:
 - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
 
+## JSON array inside another object
+Sometimes you need to include your array inside some object, e.g.:
+```json
+{
+  "some_status_field": "ok",
+  "data": [
+    {
+      "some_test_field": "test1"
+    },
+    {
+      "some_test_field": "test2"
+    }
+  ]
+}
+```
+The wrapping object that includes `data` field here is called envelope further.
+
+You need to define both of your structures: envelope and records inside:
+
+```rust
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct MyEnvelopeStructure {
+    something_else: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    data: Vec<MyItem>
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct MyItem {
+  some_test_field: String
+}
+```
+
+And use `json_array_with_envelope` instead of `json_array`.
+Have a look at [json-array-complex-structure.rs](examples/json-array-complex-structure.rs) for detail example.
+
+The support is limited:
+- Only first level of nesting is supported to avoid complex implementation with performance impact. 
+- You need either remove the target array field from `envelope` structure or use this Serde trick on the field to avoid JSON serialization issues:
+```rust
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct MyEnvelopeStructure {
+    something_else: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    data: Vec<MyItem>
+}
+```
+
 ## Licence
 Apache Software License (ASL)
 
