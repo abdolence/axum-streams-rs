@@ -72,6 +72,9 @@ mod stream_format;
 mod stream_body_as;
 pub use self::stream_body_as::StreamBodyAs;
 
+mod envelope;
+pub use envelope::*;
+
 #[cfg(feature = "json")]
 mod json_formats;
 #[cfg(feature = "json")]

@@ -1,4 +1,5 @@
 use crate::stream_format::StreamingFormat;
+use crate::StreamFormatEnvelope;
 use bytes::{BufMut, BytesMut};
 use futures::Stream;
 use futures_util::stream::BoxStream;
@@ -12,16 +13,12 @@ pub struct JsonArrayStreamFormat<E = ()>
 where
     E: Serialize,
 {
-    envelope: Option<E>,
-    envelope_field: Option<String>,
+    envelope: Option<StreamFormatEnvelope<E>>,
 }
 
 impl JsonArrayStreamFormat {
     pub fn new() -> JsonArrayStreamFormat<()> {
-        JsonArrayStreamFormat {
-            envelope: None,
-            envelope_field: None,
-        }
+        JsonArrayStreamFormat { envelope: None }
     }
 
     pub fn with_envelope<E>(envelope: E, array_field: &str) -> JsonArrayStreamFormat<E>
@@ -29,8 +26,10 @@ impl JsonArrayStreamFormat {
         E: Serialize,
     {
         JsonArrayStreamFormat {
-            envelope: Some(envelope),
-            envelope_field: Some(array_field.into()),
+            envelope: Some(StreamFormatEnvelope {
+                object: envelope,
+                array_field: array_field.to_string(),
+            }),
         }
     }
 }
@@ -69,12 +68,7 @@ where
         let prepend_stream: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> =
             Box::pin(futures_util::stream::once(futures_util::future::ready({
                 if let Some(envelope) = &self.envelope {
-                    let field_name = if let Some(field_name) = &self.envelope_field {
-                        field_name
-                    } else {
-                        "data"
-                    };
-                    match serde_json::to_vec(envelope) {
+                    match serde_json::to_vec(&envelope.object) {
                         Ok(envelope_bytes) if envelope_bytes.len() > 1 => {
                             let mut buf = BytesMut::new().writer();
                             let envelope_slice = envelope_bytes.as_slice();
@@ -88,7 +82,9 @@ where
                                     }
                                 })
                                 .and_then(|_| {
-                                    buf.write_all(format!("\"{}\":", field_name).as_bytes())
+                                    buf.write_all(
+                                        format!("\"{}\":", envelope.array_field).as_bytes(),
+                                    )
                                 })
                                 .and_then(|_| buf.write_all(JSON_ARRAY_BEGIN_BYTES))
                             {
