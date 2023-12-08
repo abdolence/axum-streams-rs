@@ -23,11 +23,8 @@ impl StreamingFormat<String> for TextStreamFormat {
             Ok(obj_vec)
         }
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
-            stream.map(move |obj| {
-                let write_text_res = write_text_record(obj);
-                write_text_res.map(axum::body::Bytes::from)
-            })
+        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
+            stream.map(move |obj| write_text_record(obj).map(|data| Frame::data(data.into())))
         });
 
         Box::pin(stream_bytes)

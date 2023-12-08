@@ -1,13 +1,13 @@
 use crate::stream_format::StreamingFormat;
+use axum::body::{Body, HttpBody};
 use axum::response::{IntoResponse, Response};
 use futures::Stream;
 use futures_util::stream::BoxStream;
 use http::HeaderMap;
+use http_body::Frame;
 use std::fmt::Formatter;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use axum::body::{Body, HttpBody};
-use http_body::Frame;
 
 pub struct StreamBodyAs<'a> {
     stream: BoxStream<'a, Result<Frame<axum::body::Bytes>, axum::Error>>,
@@ -63,5 +63,4 @@ impl<'a> HttpBody for StreamBodyAs<'a> {
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         Pin::new(&mut self.stream).poll_next(cx)
     }
-
 }
