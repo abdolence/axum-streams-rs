@@ -74,5 +74,10 @@ name = "text-example"
 path = "examples/text-example.rs"
 required-features = ["text"]
 
+[[example]]
+name = "json-array-complex-structure"
+path = "examples/json-array-complex-structure.rs"
+required-features = ["json"]
+
 [build-dependencies]
 cargo-husky = { version = "1.5", default-features = false, features = ["run-for-all", "prepush-hook", "run-cargo-fmt"] }
