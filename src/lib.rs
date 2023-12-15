@@ -68,6 +68,7 @@
 #![allow(clippy::new_without_default, clippy::needless_lifetimes)]
 
 mod stream_format;
+pub use stream_format::*;
 
 mod stream_body_as;
 pub use self::stream_body_as::StreamBodyAs;
