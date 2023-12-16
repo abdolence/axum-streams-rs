@@ -119,12 +119,7 @@ The support is limited:
 - Only first level of nesting is supported to avoid complex implementation with performance impact. 
 - You need either remove the target array field from `envelope` structure or use this Serde trick on the field to avoid JSON serialization issues:
 ```rust
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct MyEnvelopeStructure {
-    something_else: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    data: Vec<MyItem>
-}
 ```
 
 ## Licence
