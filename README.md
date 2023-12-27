@@ -27,7 +27,7 @@ axum-streams = { version = "0.12", features=["json", "csv", "protobuf", "text"] 
 
 | axum | axum-streams |
 |------|--------------|
-| 0.7  | v0.11        |
+| 0.7  | v0.11+       |
 | 0.6  | v0.9-v0.10   |
 | 0.5  | 0.7          |
 
