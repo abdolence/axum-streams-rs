@@ -1,6 +1,6 @@
 [package]
 categories = ["asynchronous", "network-programming", "web-programming"]
-description = "HTTP body streaming support for Axus: JSON/CSV and others"
+description = "HTTP body streaming support for Axum: json/csv/protobuf/txt"
 edition = "2021"
 rust-version = "1.56"
 homepage = "https://github.com/abdolence/axum-streams-rs"
