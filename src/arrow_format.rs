@@ -10,12 +10,12 @@ use http::HeaderMap;
 use http_body::Frame;
 use std::sync::Arc;
 
-pub struct ArrowRecordBatchStreamFormat {
+pub struct ArrowRecordBatchStreamIpcFormat {
     schema: SchemaRef,
     options: IpcWriteOptions,
 }
 
-impl ArrowRecordBatchStreamFormat {
+impl ArrowRecordBatchStreamIpcFormat {
     pub fn new(schema: Arc<Schema>) -> Self {
         Self::with_options(schema, IpcWriteOptions::default())
     }
@@ -28,7 +28,7 @@ impl ArrowRecordBatchStreamFormat {
     }
 }
 
-impl StreamingFormat<RecordBatch> for ArrowRecordBatchStreamFormat {
+impl StreamingFormat<RecordBatch> for ArrowRecordBatchStreamIpcFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, RecordBatch>,
@@ -66,19 +66,19 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchStreamFormat {
 }
 
 impl<'a> crate::StreamBodyAs<'a> {
-    pub fn arrow<S>(schema: SchemaRef, stream: S) -> Self
+    pub fn arrow_ipc<S>(schema: SchemaRef, stream: S) -> Self
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
     {
-        Self::new(ArrowRecordBatchStreamFormat::new(schema), stream)
+        Self::new(ArrowRecordBatchStreamIpcFormat::new(schema), stream)
     }
 
-    pub fn arrow_with_options<S>(schema: SchemaRef, stream: S, options: IpcWriteOptions) -> Self
+    pub fn arrow_ipc_with_options<S>(schema: SchemaRef, stream: S, options: IpcWriteOptions) -> Self
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
     {
         Self::new(
-            ArrowRecordBatchStreamFormat::with_options(schema, options),
+            ArrowRecordBatchStreamIpcFormat::with_options(schema, options),
             stream,
         )
     }
@@ -130,7 +130,7 @@ mod tests {
             "/",
             get(|| async move {
                 StreamBodyAs::new(
-                    ArrowRecordBatchStreamFormat::new(app_schema.clone()),
+                    ArrowRecordBatchStreamIpcFormat::new(app_schema.clone()),
                     test_stream,
                 )
             }),
@@ -138,7 +138,7 @@ mod tests {
 
         let client = TestClient::new(app).await;
 
-        let expected_proto_buf: Vec<u8> = create_test_batch(schema.clone())
+        let expected_buf: Vec<u8> = create_test_batch(schema.clone())
             .iter()
             .flat_map(|batch| {
                 let mut writer = StreamWriter::try_new(Vec::new(), &schema).expect("writer failed");
@@ -157,6 +157,6 @@ mod tests {
         );
         let body = res.bytes().await.unwrap().to_vec();
 
-        assert_eq!(body, expected_proto_buf);
+        assert_eq!(body, expected_buf);
     }
 }
