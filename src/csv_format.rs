@@ -1,7 +1,7 @@
 use crate::stream_format::StreamingFormat;
+use futures::stream::BoxStream;
 use futures::Stream;
-use futures_util::stream::BoxStream;
-use futures_util::StreamExt;
+use futures::StreamExt;
 use http::HeaderMap;
 use http_body::Frame;
 use serde::Serialize;
@@ -159,7 +159,7 @@ mod tests {
     use crate::test_client::*;
     use crate::StreamBodyAs;
     use axum::{routing::*, Router};
-    use futures_util::stream;
+    use futures::stream;
     use std::ops::Add;
 
     #[tokio::test]

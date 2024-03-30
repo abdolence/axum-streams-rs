@@ -1,7 +1,7 @@
 use crate::stream_format::StreamingFormat;
+use futures::stream::BoxStream;
 use futures::Stream;
-use futures_util::stream::BoxStream;
-use futures_util::StreamExt;
+use futures::StreamExt;
 use http::HeaderMap;
 use http_body::Frame;
 
@@ -55,7 +55,7 @@ mod tests {
     use crate::test_client::*;
     use crate::StreamBodyAs;
     use axum::{routing::*, Router};
-    use futures_util::stream;
+    use futures::stream;
 
     #[tokio::test]
     async fn serialize_text_stream_format() {

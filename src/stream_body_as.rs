@@ -1,9 +1,9 @@
 use crate::stream_format::StreamingFormat;
 use axum::body::{Body, HttpBody};
 use axum::response::{IntoResponse, Response};
+use futures::stream::BoxStream;
 use futures::Stream;
-use futures_util::stream::BoxStream;
-use http::HeaderMap;
+use http::{HeaderMap, HeaderValue};
 use http_body::Frame;
 use std::fmt::Formatter;
 use std::pin::Pin;
@@ -11,7 +11,7 @@ use std::task::{Context, Poll};
 
 pub struct StreamBodyAs<'a> {
     stream: BoxStream<'a, Result<Frame<axum::body::Bytes>, axum::Error>>,
-    trailers: Option<HeaderMap>,
+    headers: Option<HeaderMap>,
 }
 
 impl<'a> std::fmt::Debug for StreamBodyAs<'a> {
@@ -29,26 +29,33 @@ impl<'a> StreamBodyAs<'a> {
     {
         Self {
             stream: stream_format.to_bytes_stream(Box::pin(stream)),
-            trailers: stream_format.http_response_trailers(),
+            headers: stream_format.http_response_trailers(),
         }
     }
 
     pub fn headers(mut self, headers: HeaderMap) -> Self {
-        self.trailers = Some(headers);
+        self.headers = Some(headers);
+        self
+    }
+
+    pub fn header<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: http::header::IntoHeaderName,
+        V: Into<HeaderValue>,
+    {
+        let current_headers = self.headers.get_or_insert(HeaderMap::new());
+        current_headers.append(key, value.into());
         self
     }
 }
 
 impl IntoResponse for StreamBodyAs<'static> {
     fn into_response(mut self) -> Response {
-        let headers = if let Some(trailers) = self.trailers.take() {
-            trailers
-        } else {
-            HeaderMap::new()
-        };
-
+        let maybe_headers = self.headers.take();
         let mut response: Response<Body> = Response::new(Body::new(self));
-        *response.headers_mut() = headers;
+        if let Some(headers) = maybe_headers {
+            *response.headers_mut() = headers;
+        }
         response
     }
 }

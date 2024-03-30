@@ -1,9 +1,9 @@
 use crate::stream_format::StreamingFormat;
 use crate::StreamFormatEnvelope;
 use bytes::{BufMut, BytesMut};
+use futures::stream::BoxStream;
 use futures::Stream;
-use futures_util::stream::BoxStream;
-use futures_util::StreamExt;
+use futures::StreamExt;
 use http::HeaderMap;
 use http_body::Frame;
 use serde::Serialize;
@@ -66,7 +66,7 @@ where
         });
 
         let prepend_stream: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> =
-            Box::pin(futures_util::stream::once(futures_util::future::ready({
+            Box::pin(futures::stream::once(futures::future::ready({
                 if let Some(envelope) = &self.envelope {
                     match serde_json::to_vec(&envelope.object) {
                         Ok(envelope_bytes) if envelope_bytes.len() > 1 => {
@@ -108,7 +108,7 @@ where
             })));
 
         let append_stream: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> =
-            Box::pin(futures_util::stream::once(futures_util::future::ready({
+            Box::pin(futures::stream::once(futures::future::ready({
                 if self.envelope.is_some() {
                     Ok::<_, axum::Error>(Frame::data(axum::body::Bytes::from(
                         JSON_ARRAY_ENVELOP_END_BYTES,
@@ -216,7 +216,7 @@ mod tests {
     use crate::test_client::*;
     use crate::StreamBodyAs;
     use axum::{routing::*, Router};
-    use futures_util::stream;
+    use futures::stream;
 
     #[tokio::test]
     async fn serialize_json_array_stream_format() {
