@@ -103,7 +103,7 @@ pub use protobuf_format::ProtobufStreamFormat;
 #[cfg(feature = "arrow")]
 mod arrow_format;
 #[cfg(feature = "arrow")]
-pub use arrow_format::ArrowRecordBatchStreamIpcFormat;
+pub use arrow_format::ArrowRecordBatchIpcStreamFormat;
 
 #[cfg(test)]
 mod test_client;

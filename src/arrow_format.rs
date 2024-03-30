@@ -10,12 +10,12 @@ use http::HeaderMap;
 use http_body::Frame;
 use std::sync::Arc;
 
-pub struct ArrowRecordBatchStreamIpcFormat {
+pub struct ArrowRecordBatchIpcStreamFormat {
     schema: SchemaRef,
     options: IpcWriteOptions,
 }
 
-impl ArrowRecordBatchStreamIpcFormat {
+impl ArrowRecordBatchIpcStreamFormat {
     pub fn new(schema: Arc<Schema>) -> Self {
         Self::with_options(schema, IpcWriteOptions::default())
     }
@@ -28,7 +28,7 @@ impl ArrowRecordBatchStreamIpcFormat {
     }
 }
 
-impl StreamingFormat<RecordBatch> for ArrowRecordBatchStreamIpcFormat {
+impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, RecordBatch>,
@@ -70,7 +70,7 @@ impl<'a> crate::StreamBodyAs<'a> {
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
     {
-        Self::new(ArrowRecordBatchStreamIpcFormat::new(schema), stream)
+        Self::new(ArrowRecordBatchIpcStreamFormat::new(schema), stream)
     }
 
     pub fn arrow_ipc_with_options<S>(schema: SchemaRef, stream: S, options: IpcWriteOptions) -> Self
@@ -78,7 +78,7 @@ impl<'a> crate::StreamBodyAs<'a> {
         S: Stream<Item = RecordBatch> + 'a + Send,
     {
         Self::new(
-            ArrowRecordBatchStreamIpcFormat::with_options(schema, options),
+            ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
             stream,
         )
     }
@@ -130,7 +130,7 @@ mod tests {
             "/",
             get(|| async move {
                 StreamBodyAs::new(
-                    ArrowRecordBatchStreamIpcFormat::new(app_schema.clone()),
+                    ArrowRecordBatchIpcStreamFormat::new(app_schema.clone()),
                     test_stream,
                 )
             }),
