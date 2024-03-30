@@ -1,4 +1,4 @@
-use futures_util::stream::BoxStream;
+use futures::stream::BoxStream;
 use http::HeaderMap;
 
 pub trait StreamingFormat<T> {

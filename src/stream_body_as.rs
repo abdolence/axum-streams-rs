@@ -1,8 +1,8 @@
 use crate::stream_format::StreamingFormat;
 use axum::body::{Body, HttpBody};
 use axum::response::{IntoResponse, Response};
+use futures::stream::BoxStream;
 use futures::Stream;
-use futures_util::stream::BoxStream;
 use http::HeaderMap;
 use http_body::Frame;
 use std::fmt::Formatter;
