@@ -36,7 +36,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         let schema = self.schema.clone();
         let options = self.options.clone();
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+        Box::pin({
             stream.map(move |batch| {
                 let buf = BytesMut::new().writer();
                 let mut writer = StreamWriter::try_new_with_options(buf, &schema, options.clone())
@@ -49,9 +49,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
                     .map(|buf| buf.into_inner().freeze())
                     .map(axum::body::Bytes::from)
             })
-        });
-
-        Box::pin(stream_bytes)
+        })
     }
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {

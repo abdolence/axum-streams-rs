@@ -108,7 +108,7 @@ where
         let stream_escape = self.escape;
         let terminator = self.terminator;
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+        Box::pin({
             stream.enumerate().map(move |(index, obj)| {
                 let mut writer = csv::WriterBuilder::new()
                     .has_headers(index == 0 && stream_with_header)
@@ -128,9 +128,7 @@ where
                     .map_err(axum::Error::new)
                     .map(axum::body::Bytes::from)
             })
-        });
-
-        Box::pin(stream_bytes)
+        })
     }
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {

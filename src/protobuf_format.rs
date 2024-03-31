@@ -35,14 +35,12 @@ where
             Ok(frame_vec)
         }
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+        Box::pin({
             stream.map(move |obj| {
                 let write_protobuf_res = write_protobuf_record(obj);
                 write_protobuf_res.map(axum::body::Bytes::from)
             })
-        });
-
-        Box::pin(stream_bytes)
+        })
     }
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {

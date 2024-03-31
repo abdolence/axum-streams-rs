@@ -141,7 +141,7 @@ where
         &'a self,
         stream: BoxStream<'b, T>,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
+        Box::pin({
             stream.map(|obj| {
                 let mut buf = BytesMut::new().writer();
                 match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
@@ -152,9 +152,7 @@ where
                     Err(e) => Err(e),
                 }
             })
-        });
-
-        Box::pin(stream_bytes)
+        })
     }
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {

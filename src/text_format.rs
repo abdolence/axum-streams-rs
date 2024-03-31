@@ -24,10 +24,7 @@ impl StreamingFormat<String> for TextStreamFormat {
             Ok(obj_vec)
         }
 
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> =
-            Box::pin(stream.map(move |obj| write_text_record(obj).map(|data| data.into())));
-
-        Box::pin(stream_bytes)
+        Box::pin(stream.map(move |obj| write_text_record(obj).map(|data| data.into())))
     }
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {
