@@ -1,4 +1,6 @@
+use crate::stream_body_as::StreamBodyAsOptions;
 use crate::stream_format::StreamingFormat;
+use crate::StreamBodyAs;
 use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
@@ -23,7 +25,7 @@ impl StreamingFormat<String> for TextStreamFormat {
         }
 
         let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> =
-            Box::pin({ stream.map(move |obj| write_text_record(obj).map(|data| data.into())) });
+            Box::pin(stream.map(move |obj| write_text_record(obj).map(|data| data.into())));
 
         Box::pin(stream_bytes)
     }
@@ -38,12 +40,21 @@ impl StreamingFormat<String> for TextStreamFormat {
     }
 }
 
-impl<'a> crate::StreamBodyAs<'a> {
+impl<'a> StreamBodyAs<'a> {
     pub fn text<S>(stream: S) -> Self
     where
         S: Stream<Item = String> + 'a + Send,
     {
         Self::new(TextStreamFormat::new(), stream)
+    }
+}
+
+impl StreamBodyAsOptions {
+    pub fn text<'a, S>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = String> + 'a + Send,
+    {
+        StreamBodyAs::with_options(TextStreamFormat::new(), stream, self)
     }
 }
 

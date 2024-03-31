@@ -1,4 +1,6 @@
+use crate::stream_body_as::StreamBodyAsOptions;
 use crate::stream_format::StreamingFormat;
+use crate::StreamBodyAs;
 use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
@@ -141,13 +143,23 @@ where
     }
 }
 
-impl<'a> crate::StreamBodyAs<'a> {
+impl<'a> StreamBodyAs<'a> {
     pub fn csv<S, T>(stream: S) -> Self
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
         Self::new(CsvStreamFormat::new(false, b','), stream)
+    }
+}
+
+impl StreamBodyAsOptions {
+    pub fn csv<'a, S, T>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(CsvStreamFormat::new(false, b','), stream, self)
     }
 }
 

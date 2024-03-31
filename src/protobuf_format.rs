@@ -1,4 +1,6 @@
+use crate::stream_body_as::StreamBodyAsOptions;
 use crate::stream_format::StreamingFormat;
+use crate::StreamBodyAs;
 use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
@@ -53,13 +55,23 @@ where
     }
 }
 
-impl<'a> crate::StreamBodyAs<'a> {
+impl<'a> StreamBodyAs<'a> {
     pub fn protobuf<S, T>(stream: S) -> Self
     where
         T: prost::Message + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
         Self::new(ProtobufStreamFormat::new(), stream)
+    }
+}
+
+impl StreamBodyAsOptions {
+    pub fn protobuf<'a, S, T>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: prost::Message + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(ProtobufStreamFormat::new(), stream, self)
     }
 }
 

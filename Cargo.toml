@@ -82,6 +82,11 @@ path = "examples/json-array-complex-structure.rs"
 required-features = ["json"]
 
 [[example]]
+name = "json-with-buffering"
+path = "examples/json-with-buffering.rs"
+required-features = ["json"]
+
+[[example]]
 name = "arrow-example"
 path = "examples/arrow-example.rs"
 required-features = ["arrow"]

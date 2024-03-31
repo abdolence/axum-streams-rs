@@ -1,5 +1,6 @@
+use crate::stream_body_as::StreamBodyAsOptions;
 use crate::stream_format::StreamingFormat;
-use crate::StreamFormatEnvelope;
+use crate::{StreamBodyAs, StreamFormatEnvelope};
 use bytes::{BufMut, BytesMut};
 use futures::stream::BoxStream;
 use futures::Stream;
@@ -200,6 +201,42 @@ impl<'a> crate::StreamBodyAs<'a> {
         S: Stream<Item = T> + 'a + Send,
     {
         Self::new(JsonNewLineStreamFormat::new(), stream)
+    }
+}
+
+impl StreamBodyAsOptions {
+    pub fn json_array<'a, S, T>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(JsonArrayStreamFormat::new(), stream, self)
+    }
+
+    pub fn json_array_with_envelope<'a, S, T, E>(
+        self,
+        stream: S,
+        envelope: E,
+        array_field: &str,
+    ) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
+        E: Serialize + Send + Sync + 'static,
+    {
+        StreamBodyAs::with_options(
+            JsonArrayStreamFormat::with_envelope(envelope, array_field),
+            stream,
+            self,
+        )
+    }
+
+    pub fn json_nl<'a, S, T>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(JsonNewLineStreamFormat::new(), stream, self)
     }
 }
 

@@ -1,4 +1,5 @@
-use crate::StreamingFormat;
+use crate::stream_body_as::StreamBodyAsOptions;
+use crate::{StreamBodyAs, StreamingFormat};
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use arrow::ipc::writer::{IpcWriteOptions, StreamWriter};
@@ -78,6 +79,31 @@ impl<'a> crate::StreamBodyAs<'a> {
         Self::new(
             ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
             stream,
+        )
+    }
+}
+
+impl StreamBodyAsOptions {
+    pub fn arrow_ipc<'a, S>(self, schema: SchemaRef, stream: S) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = RecordBatch> + 'a + Send,
+    {
+        StreamBodyAs::with_options(ArrowRecordBatchIpcStreamFormat::new(schema), stream, self)
+    }
+
+    pub fn arrow_ipc_with_options<'a, S>(
+        self,
+        schema: SchemaRef,
+        stream: S,
+        options: IpcWriteOptions,
+    ) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = RecordBatch> + 'a + Send,
+    {
+        StreamBodyAs::with_options(
+            ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
+            stream,
+            self,
         )
     }
 }
