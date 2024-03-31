@@ -25,7 +25,7 @@ fn source_test_stream() -> impl Stream<Item = MyTestStructure> {
 
 async fn test_json_array_stream() -> impl IntoResponse {
     StreamBodyAsOptions::new()
-        .buffering_items(1000)
+        .buffering_ready_items(1000)
         .json_array(source_test_stream())
 }
 

@@ -10,6 +10,7 @@ Library provides HTTP response streaming support for [axum web framework](https:
 - JSON lines stream format
 - CSV stream
 - Protobuf len-prefixed stream format
+- Apache Arrow IPC stream format
 - Text stream
 
 This type of responses are useful when you are reading huge stream of objects from some source (such as database, file, etc)
@@ -20,7 +21,7 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.12", features=["json", "csv", "protobuf", "text"] }
+axum-streams = { version = "0.14", features=["json", "csv", "protobuf", "text"] }
 ```
 
 ## Compatibility matrix
@@ -78,6 +79,15 @@ To run example use:
 ## Need client support?
 There is the same functionality for:
 - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
+
+## Configuration of the frame size
+By default, the library produces an HTTP frame per item in the stream. 
+You can change this is using `StreamAsOptions`:
+
+```rust
+    StreamBodyAsOptions::new().buffering_ready_items(1000)
+        .json_array(source_test_stream())
+```
 
 ## JSON array inside another object
 Sometimes you need to include your array inside some object, e.g.:

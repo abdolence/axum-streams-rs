@@ -125,7 +125,7 @@ impl StreamBodyAsOptions {
         }
     }
 
-    pub fn buffering_items(mut self, ready_items: usize) -> Self {
+    pub fn buffering_ready_items(mut self, ready_items: usize) -> Self {
         self.buffering_ready_items = Some(ready_items);
         self
     }
@@ -143,7 +143,7 @@ mod tests {
         let options = StreamBodyAsOptions::new();
         assert_eq!(options.buffering_ready_items, None);
 
-        let options = StreamBodyAsOptions::new().buffering_items(10);
+        let options = StreamBodyAsOptions::new().buffering_ready_items(10);
         assert_eq!(options.buffering_ready_items, Some(10));
     }
 
@@ -174,7 +174,7 @@ mod tests {
         let stream_body_as = StreamBodyAs::with_options(
             TextStreamFormat::new(),
             stream,
-            StreamBodyAsOptions::new().buffering_items(2),
+            StreamBodyAsOptions::new().buffering_ready_items(2),
         );
         let response = stream_body_as.into_response();
         assert_eq!(

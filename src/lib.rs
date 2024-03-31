@@ -6,6 +6,8 @@
 //! - JSON Lines (NL/NewLines) format
 //! - CSV stream format
 //! - Protobuf len-prefixed stream format
+//! - Arrow IPC stream format
+//! - Text stream format
 //!
 //! [JSON Streaming](https://en.wikipedia.org/wiki/JSON_streaming) is a term referring to streaming a
 //! stream of element as independent JSON objects as a continuous HTTP request or response.

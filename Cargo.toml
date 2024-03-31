@@ -1,6 +1,6 @@
 [package]
 categories = ["asynchronous", "network-programming", "web-programming"]
-description = "HTTP body streaming support for Axum: json/csv/protobuf/txt"
+description = "HTTP body streaming support for Axum: json/csv/protobuf/arrow/txt"
 edition = "2021"
 rust-version = "1.56"
 homepage = "https://github.com/abdolence/axum-streams-rs"
@@ -11,7 +11,7 @@ license = "Apache-2.0"
 name = "axum-streams"
 readme = "README.md"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
-version = "0.12.1-alpha.0"
+version = "0.13.1-alpha.0"
 
 [badges]
 maintenance = { status = "actively-developed" }
