@@ -5,7 +5,6 @@ use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
-use http_body::Frame;
 use serde::Serialize;
 use std::io::Write;
 
@@ -42,8 +41,8 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
-        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
+    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
+        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
             stream.enumerate().map(|(index, obj)| {
                 let mut buf = BytesMut::new().writer();
 
@@ -56,7 +55,7 @@ where
                 match sep_write_res {
                     Ok(_) => {
                         match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
-                            Ok(_) => Ok(Frame::data(buf.into_inner().freeze())),
+                            Ok(_) => Ok(buf.into_inner().freeze()),
                             Err(e) => Err(e),
                         }
                     }
@@ -65,7 +64,7 @@ where
             })
         });
 
-        let prepend_stream: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> =
+        let prepend_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
             Box::pin(futures::stream::once(futures::future::ready({
                 if let Some(envelope) = &self.envelope {
                     match serde_json::to_vec(&envelope.object) {
@@ -88,9 +87,7 @@ where
                                 })
                                 .and_then(|_| buf.write_all(JSON_ARRAY_BEGIN_BYTES))
                             {
-                                Ok(_) => {
-                                    Ok::<_, axum::Error>(Frame::data(buf.into_inner().freeze()))
-                                }
+                                Ok(_) => Ok::<_, axum::Error>(buf.into_inner().freeze()),
                                 Err(e) => Err(axum::Error::new(e)),
                             }
                         }
@@ -101,20 +98,16 @@ where
                         Err(e) => Err(axum::Error::new(e)),
                     }
                 } else {
-                    Ok::<_, axum::Error>(Frame::data(axum::body::Bytes::from(
-                        JSON_ARRAY_BEGIN_BYTES,
-                    )))
+                    Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_BEGIN_BYTES))
                 }
             })));
 
-        let append_stream: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> =
+        let append_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
             Box::pin(futures::stream::once(futures::future::ready({
                 if self.envelope.is_some() {
-                    Ok::<_, axum::Error>(Frame::data(axum::body::Bytes::from(
-                        JSON_ARRAY_ENVELOP_END_BYTES,
-                    )))
+                    Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_ENVELOP_END_BYTES))
                 } else {
-                    Ok::<_, axum::Error>(Frame::data(axum::body::Bytes::from(JSON_ARRAY_END_BYTES)))
+                    Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_END_BYTES))
                 }
             })));
 
@@ -146,13 +139,13 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
-        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
+    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
+        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
             stream.map(|obj| {
                 let mut buf = BytesMut::new().writer();
                 match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
                     Ok(_) => match buf.write_all(JSON_NL_SEP_BYTES).map_err(axum::Error::new) {
-                        Ok(_) => Ok(Frame::data(buf.into_inner().freeze())),
+                        Ok(_) => Ok(buf.into_inner().freeze()),
                         Err(e) => Err(e),
                     },
                     Err(e) => Err(e),

@@ -7,7 +7,6 @@ use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
-use http_body::Frame;
 use std::sync::Arc;
 
 pub struct ArrowRecordBatchIpcStreamFormat {
@@ -32,11 +31,11 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, RecordBatch>,
-    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
+    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let schema = self.schema.clone();
         let options = self.options.clone();
 
-        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
+        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
             stream.map(move |batch| {
                 let buf = BytesMut::new().writer();
                 let mut writer = StreamWriter::try_new_with_options(buf, &schema, options.clone())
@@ -48,7 +47,6 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
                     .map_err(axum::Error::new)
                     .map(|buf| buf.into_inner().freeze())
                     .map(axum::body::Bytes::from)
-                    .map(Frame::data)
             })
         });
 
