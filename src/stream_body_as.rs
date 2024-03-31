@@ -12,6 +12,7 @@ use std::task::{Context, Poll};
 pub struct StreamBodyAs<'a> {
     stream: BoxStream<'a, Result<Frame<axum::body::Bytes>, axum::Error>>,
     headers: Option<HeaderMap>,
+    options: StreamBodyAsOptions,
 }
 
 impl<'a> std::fmt::Debug for StreamBodyAs<'a> {
@@ -27,9 +28,18 @@ impl<'a> StreamBodyAs<'a> {
         FMT: StreamingFormat<T>,
         S: Stream<Item = T> + 'a + Send,
     {
+        Self::with_options(stream_format, stream, StreamBodyAsOptions::new())
+    }
+
+    pub fn with_options<S, T, FMT>(stream_format: FMT, stream: S, options: StreamBodyAsOptions) -> Self
+    where
+        FMT: StreamingFormat<T>,
+        S: Stream<Item = T> + 'a + Send,
+    {
         Self {
             stream: stream_format.to_bytes_stream(Box::pin(stream)),
             headers: stream_format.http_response_trailers(),
+            options,
         }
     }
 
@@ -69,5 +79,23 @@ impl<'a> HttpBody for StreamBodyAs<'a> {
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         Pin::new(&mut self.stream).poll_next(cx)
+    }
+}
+
+
+pub struct StreamBodyAsOptions {
+    pub size_hint: Option<usize>,
+}
+
+impl StreamBodyAsOptions {
+    pub fn new() -> Self {
+        Self {
+            size_hint: None,
+        }
+    }
+
+    pub fn size_hint(mut self, size_hint: usize) -> Self {
+        self.size_hint = Some(size_hint);
+        self
     }
 }
