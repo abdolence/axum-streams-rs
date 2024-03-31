@@ -1,9 +1,10 @@
+use crate::stream_body_as::StreamBodyAsOptions;
 use crate::stream_format::StreamingFormat;
+use crate::StreamBodyAs;
 use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
-use http_body::Frame;
 use serde::Serialize;
 
 pub struct CsvStreamFormat {
@@ -97,7 +98,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
+    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_with_header = self.has_headers;
         let stream_delimiter = self.delimiter;
         let stream_flexible = self.flexible;
@@ -107,7 +108,7 @@ where
         let stream_escape = self.escape;
         let terminator = self.terminator;
 
-        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
+        Box::pin({
             stream.enumerate().map(move |(index, obj)| {
                 let mut writer = csv::WriterBuilder::new()
                     .has_headers(index == 0 && stream_with_header)
@@ -126,11 +127,8 @@ where
                     .into_inner()
                     .map_err(axum::Error::new)
                     .map(axum::body::Bytes::from)
-                    .map(Frame::data)
             })
-        });
-
-        Box::pin(stream_bytes)
+        })
     }
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {
@@ -143,13 +141,23 @@ where
     }
 }
 
-impl<'a> crate::StreamBodyAs<'a> {
+impl<'a> StreamBodyAs<'a> {
     pub fn csv<S, T>(stream: S) -> Self
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
         Self::new(CsvStreamFormat::new(false, b','), stream)
+    }
+}
+
+impl StreamBodyAsOptions {
+    pub fn csv<'a, S, T>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(CsvStreamFormat::new(false, b','), stream, self)
     }
 }
 

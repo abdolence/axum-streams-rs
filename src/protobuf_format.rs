@@ -1,9 +1,10 @@
+use crate::stream_body_as::StreamBodyAsOptions;
 use crate::stream_format::StreamingFormat;
+use crate::StreamBodyAs;
 use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
-use http_body::Frame;
 
 pub struct ProtobufStreamFormat;
 
@@ -20,7 +21,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-    ) -> BoxStream<'b, Result<Frame<axum::body::Bytes>, axum::Error>> {
+    ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         fn write_protobuf_record<T>(obj: T) -> Result<Vec<u8>, axum::Error>
         where
             T: prost::Message,
@@ -34,16 +35,12 @@ where
             Ok(frame_vec)
         }
 
-        let stream_bytes: BoxStream<Result<Frame<axum::body::Bytes>, axum::Error>> = Box::pin({
+        Box::pin({
             stream.map(move |obj| {
                 let write_protobuf_res = write_protobuf_record(obj);
-                write_protobuf_res
-                    .map(axum::body::Bytes::from)
-                    .map(Frame::data)
+                write_protobuf_res.map(axum::body::Bytes::from)
             })
-        });
-
-        Box::pin(stream_bytes)
+        })
     }
 
     fn http_response_trailers(&self) -> Option<HeaderMap> {
@@ -56,13 +53,23 @@ where
     }
 }
 
-impl<'a> crate::StreamBodyAs<'a> {
+impl<'a> StreamBodyAs<'a> {
     pub fn protobuf<S, T>(stream: S) -> Self
     where
         T: prost::Message + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
         Self::new(ProtobufStreamFormat::new(), stream)
+    }
+}
+
+impl StreamBodyAsOptions {
+    pub fn protobuf<'a, S, T>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: prost::Message + Send + Sync + 'static,
+        S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(ProtobufStreamFormat::new(), stream, self)
     }
 }
 
