@@ -63,12 +63,11 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         }
 
         fn write_continuation() -> Result<axum::body::Bytes, ArrowError> {
-            let mut writer = BytesMut::new().writer();
+            let mut writer = BytesMut::with_capacity(8).writer();
             const CONTINUATION_MARKER: [u8; 4] = [0xff; 4];
-            let total_len = 0_i32.to_le_bytes(); // Always zero in the stream format
-
+            const TOTAL_LEN: [u8; 4] = [0; 4];
             writer.write_all(&CONTINUATION_MARKER)?;
-            writer.write_all(&total_len[..])?;
+            writer.write_all(&TOTAL_LEN)?;
             writer.flush()?;
             Ok(writer.into_inner().freeze())
         }
