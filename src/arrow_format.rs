@@ -49,9 +49,8 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
                 write_message(&mut writer, encoded_message, write_options)?;
             }
 
-            let (encoded_dictionaries, encoded_message) = ipc_data_gen
-                .encoded_batch(batch, dictionary_tracker, write_options)
-                .expect("StreamWriter is configured to not error on dictionary replacement");
+            let (encoded_dictionaries, encoded_message) =
+                ipc_data_gen.encoded_batch(batch, dictionary_tracker, write_options)?;
 
             for encoded_dictionary in encoded_dictionaries {
                 write_message(&mut writer, encoded_dictionary, write_options)?;
