@@ -21,7 +21,7 @@ name = "axum_streams"
 path = "src/lib.rs"
 
 [dependencies]
-axum = { version = "0.7" }
+axum = { version = "0.7.5" }
 bytes = "1"
 http = "1"
 http-body = "1"
