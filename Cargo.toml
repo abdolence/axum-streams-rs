@@ -51,7 +51,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "str
 tower = { version = "0.4", default-features = false, features = ["util", "make"] }
 tower-http = { version = "0.5", features = ["util", "map-response-body"] }
 tower-layer = "0.3"
-tower-service = "0.3"
+tower-service = "0.3.2"
 tokio = { version = "1", features = ["full"] }
 prost = { version= "0.12", features = ["prost-derive"] }
 arrow = { version = "51", features = ["ipc"] }
