@@ -135,6 +135,14 @@ impl<'a> crate::StreamBodyAs<'a> {
         )
     }
 
+    pub fn arrow_ipc_with_errors<S, E>(schema: SchemaRef, stream: S) -> Self
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        Self::new(ArrowRecordBatchIpcStreamFormat::new(schema), stream)
+    }
+
     pub fn arrow_ipc_with_options<S>(schema: SchemaRef, stream: S, options: IpcWriteOptions) -> Self
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
@@ -142,6 +150,21 @@ impl<'a> crate::StreamBodyAs<'a> {
         Self::new(
             ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
             stream.map(Ok::<RecordBatch, axum::Error>),
+        )
+    }
+
+    pub fn arrow_ipc_with_options_errors<S, E>(
+        schema: SchemaRef,
+        stream: S,
+        options: IpcWriteOptions,
+    ) -> Self
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        Self::new(
+            ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
+            stream,
         )
     }
 }
@@ -158,6 +181,14 @@ impl StreamBodyAsOptions {
         )
     }
 
+    pub fn arrow_ipc_with_errors<'a, S, E>(self, schema: SchemaRef, stream: S) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        StreamBodyAs::with_options(ArrowRecordBatchIpcStreamFormat::new(schema), stream, self)
+    }
+
     pub fn arrow_ipc_with_options<'a, S>(
         self,
         schema: SchemaRef,
@@ -170,6 +201,23 @@ impl StreamBodyAsOptions {
         StreamBodyAs::with_options(
             ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
             stream.map(Ok::<RecordBatch, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn arrow_ipc_with_options_errors<'a, S, E>(
+        self,
+        schema: SchemaRef,
+        stream: S,
+        options: IpcWriteOptions,
+    ) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        StreamBodyAs::with_options(
+            ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
+            stream,
             self,
         )
     }

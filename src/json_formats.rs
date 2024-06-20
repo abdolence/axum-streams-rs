@@ -195,15 +195,41 @@ impl<'a> crate::StreamBodyAs<'a> {
         )
     }
 
-    pub fn json_array_with_envelope<S, T, E>(stream: S, envelope: E, array_field: &str) -> Self
+    pub fn json_array_with_errors<S, T, E>(stream: S) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        Self::new(JsonArrayStreamFormat::new(), stream)
+    }
+
+    pub fn json_array_with_envelope<S, T, EN>(stream: S, envelope: EN, array_field: &str) -> Self
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
-        E: Serialize + Send + Sync + 'static,
+        EN: Serialize + Send + Sync + 'static,
     {
         Self::new(
             JsonArrayStreamFormat::with_envelope(envelope, array_field),
             stream.map(Ok::<T, axum::Error>),
+        )
+    }
+
+    pub fn json_array_with_envelope_errors<S, T, E, EN>(
+        stream: S,
+        envelope: EN,
+        array_field: &str,
+    ) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+        EN: Serialize + Send + Sync + 'static,
+    {
+        Self::new(
+            JsonArrayStreamFormat::with_envelope(envelope, array_field),
+            stream,
         )
     }
 
@@ -216,6 +242,15 @@ impl<'a> crate::StreamBodyAs<'a> {
             JsonNewLineStreamFormat::new(),
             stream.map(Ok::<T, axum::Error>),
         )
+    }
+
+    pub fn json_nl_with_errors<S, T, E>(stream: S) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        Self::new(JsonNewLineStreamFormat::new(), stream)
     }
 }
 
@@ -232,20 +267,48 @@ impl StreamBodyAsOptions {
         )
     }
 
-    pub fn json_array_with_envelope<'a, S, T, E>(
+    pub fn json_array_with_errors<'a, S, T, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        StreamBodyAs::with_options(JsonArrayStreamFormat::new(), stream, self)
+    }
+
+    pub fn json_array_with_envelope<'a, S, T, EN>(
         self,
         stream: S,
-        envelope: E,
+        envelope: EN,
         array_field: &str,
     ) -> StreamBodyAs<'a>
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
-        E: Serialize + Send + Sync + 'static,
+        EN: Serialize + Send + Sync + 'static,
     {
         StreamBodyAs::with_options(
             JsonArrayStreamFormat::with_envelope(envelope, array_field),
             stream.map(Ok::<T, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn json_array_with_envelope_errors<'a, S, T, E, EN>(
+        self,
+        stream: S,
+        envelope: EN,
+        array_field: &str,
+    ) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+        EN: Serialize + Send + Sync + 'static,
+    {
+        StreamBodyAs::with_options(
+            JsonArrayStreamFormat::with_envelope(envelope, array_field),
+            stream,
             self,
         )
     }
@@ -260,6 +323,15 @@ impl StreamBodyAsOptions {
             stream.map(Ok::<T, axum::Error>),
             self,
         )
+    }
+
+    pub fn json_nl_with_errors<'a, S, T, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        StreamBodyAs::with_options(JsonNewLineStreamFormat::new(), stream, self)
     }
 }
 

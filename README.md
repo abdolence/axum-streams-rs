@@ -89,6 +89,37 @@ You can change this is using `StreamAsOptions`:
         .json_array(source_test_stream())
 ```
 
+## Error handling
+The library provides a way to propagate errors in the stream:
+
+```rust
+struct MyError {
+    message: String,
+}
+
+impl Into<axum::Error> for MyError {
+    fn into(self) -> axum::Error {
+        axum::Error::new(self.message)
+    }
+}
+
+fn my_source_stream() -> impl Stream<Item=Result<MyTestStructure, MyError>> {
+  // Simulating a stream with a plain vector and throttling to show how it works
+  stream::iter(vec![
+    Ok(MyTestStructure {
+      some_test_field: "test1".to_string()
+    }); 1000
+  ])
+}
+
+async fn test_json_array_stream() -> impl IntoResponse {
+  // Use _with_errors functions or directly `StreamBodyAs::with_options` 
+  // to produce a stream with errors
+  StreamBodyAs::json_array_with_errors(source_test_stream())
+}
+
+```
+
 ## JSON array inside another object
 Sometimes you need to include your array inside some object, e.g.:
 ```json

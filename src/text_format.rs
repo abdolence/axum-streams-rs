@@ -53,6 +53,14 @@ impl<'a> StreamBodyAs<'a> {
             stream.map(Ok::<String, axum::Error>),
         )
     }
+
+    pub fn text_with_errors<S, E>(stream: S) -> Self
+    where
+        S: Stream<Item = Result<String, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        Self::new(TextStreamFormat::new(), stream)
+    }
 }
 
 impl StreamBodyAsOptions {
@@ -65,6 +73,14 @@ impl StreamBodyAsOptions {
             stream.map(Ok::<String, axum::Error>),
             self,
         )
+    }
+
+    pub fn text_with_errors<'a, S, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = Result<String, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        StreamBodyAs::with_options(TextStreamFormat::new(), stream, self)
     }
 }
 

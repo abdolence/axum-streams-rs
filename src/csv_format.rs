@@ -161,6 +161,15 @@ impl<'a> StreamBodyAs<'a> {
             stream.map(Ok::<T, axum::Error>),
         )
     }
+
+    pub fn csv_with_errors<S, T, E>(stream: S) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error> + 'static,
+    {
+        Self::new(CsvStreamFormat::new(false, b','), stream)
+    }
 }
 
 impl StreamBodyAsOptions {
@@ -174,6 +183,15 @@ impl StreamBodyAsOptions {
             stream.map(Ok::<T, axum::Error>),
             self,
         )
+    }
+
+    pub fn csv_with_errors<'a, S, T, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error> + 'static,
+    {
+        StreamBodyAs::with_options(CsvStreamFormat::new(false, b','), stream, self)
     }
 }
 

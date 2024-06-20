@@ -70,6 +70,15 @@ impl<'a> StreamBodyAs<'a> {
             stream.map(Ok::<T, axum::Error>),
         )
     }
+
+    pub fn protobuf_with_errors<S, T, E>(stream: S) -> Self
+    where
+        T: prost::Message + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        Self::new(ProtobufStreamFormat::new(), stream)
+    }
 }
 
 impl StreamBodyAsOptions {
@@ -83,6 +92,15 @@ impl StreamBodyAsOptions {
             stream.map(Ok::<T, axum::Error>),
             self,
         )
+    }
+
+    pub fn protobuf_with_errors<'a, S, T, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: prost::Message + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
+        StreamBodyAs::with_options(ProtobufStreamFormat::new(), stream, self)
     }
 }
 
