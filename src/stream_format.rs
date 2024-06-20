@@ -9,5 +9,5 @@ pub trait StreamingFormat<T> {
         options: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>>;
 
-    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap>;
+    fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap>;
 }

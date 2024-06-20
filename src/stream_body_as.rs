@@ -43,7 +43,7 @@ impl<'a> StreamBodyAs<'a> {
     {
         Self {
             stream: Self::create_stream_frames(&stream_format, stream, &options),
-            headers: stream_format.http_response_trailers(&options),
+            headers: stream_format.http_response_headers(&options),
         }
     }
 

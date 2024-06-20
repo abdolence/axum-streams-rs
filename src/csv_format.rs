@@ -132,7 +132,7 @@ where
         })
     }
 
-    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
+    fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
