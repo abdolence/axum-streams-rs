@@ -33,7 +33,7 @@ impl ArrowRecordBatchIpcStreamFormat {
 impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
-        stream: BoxStream<'b, RecordBatch>,
+        stream: BoxStream<'b, Result<RecordBatch, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         fn write_batch(
@@ -81,8 +81,9 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         let batch_stream = Box::pin({
             stream.scan(
                 (ipc_data_gen, dictionary_tracker, 0),
-                move |(ipc_data_gen, dictionary_tracker, idx), batch| {
-                    futures::future::ready({
+                move |(ipc_data_gen, dictionary_tracker, idx), batch_res| match batch_res {
+                    Err(e) => futures::future::ready(Some(Err(e))),
+                    Ok(batch) => futures::future::ready({
                         let prepend_schema = if *idx == 0 {
                             Some(batch_schema.clone())
                         } else {
@@ -98,7 +99,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
                         )
                         .map_err(axum::Error::new);
                         Some(bytes)
-                    })
+                    }),
                 },
             )
         });
@@ -111,7 +112,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         Box::pin(batch_stream.chain(append_stream))
     }
 
-    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
+    fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
@@ -128,12 +129,38 @@ impl<'a> crate::StreamBodyAs<'a> {
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
     {
+        Self::new(
+            ArrowRecordBatchIpcStreamFormat::new(schema),
+            stream.map(Ok::<RecordBatch, axum::Error>),
+        )
+    }
+
+    pub fn arrow_ipc_with_errors<S, E>(schema: SchemaRef, stream: S) -> Self
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
         Self::new(ArrowRecordBatchIpcStreamFormat::new(schema), stream)
     }
 
     pub fn arrow_ipc_with_options<S>(schema: SchemaRef, stream: S, options: IpcWriteOptions) -> Self
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
+    {
+        Self::new(
+            ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
+            stream.map(Ok::<RecordBatch, axum::Error>),
+        )
+    }
+
+    pub fn arrow_ipc_with_options_errors<S, E>(
+        schema: SchemaRef,
+        stream: S,
+        options: IpcWriteOptions,
+    ) -> Self
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
     {
         Self::new(
             ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
@@ -147,6 +174,18 @@ impl StreamBodyAsOptions {
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
     {
+        StreamBodyAs::with_options(
+            ArrowRecordBatchIpcStreamFormat::new(schema),
+            stream.map(Ok::<RecordBatch, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn arrow_ipc_with_errors<'a, S, E>(self, schema: SchemaRef, stream: S) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
         StreamBodyAs::with_options(ArrowRecordBatchIpcStreamFormat::new(schema), stream, self)
     }
 
@@ -158,6 +197,23 @@ impl StreamBodyAsOptions {
     ) -> StreamBodyAs<'a>
     where
         S: Stream<Item = RecordBatch> + 'a + Send,
+    {
+        StreamBodyAs::with_options(
+            ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
+            stream.map(Ok::<RecordBatch, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn arrow_ipc_with_options_errors<'a, S, E>(
+        self,
+        schema: SchemaRef,
+        stream: S,
+        options: IpcWriteOptions,
+    ) -> StreamBodyAs<'a>
+    where
+        S: Stream<Item = Result<RecordBatch, E>> + 'a + Send,
+        E: Into<axum::Error>,
     {
         StreamBodyAs::with_options(
             ArrowRecordBatchIpcStreamFormat::with_options(schema, options),
@@ -214,7 +270,7 @@ mod tests {
             get(|| async move {
                 StreamBodyAs::new(
                     ArrowRecordBatchIpcStreamFormat::new(app_schema.clone()),
-                    test_stream,
+                    test_stream.map(Ok::<_, axum::Error>),
                 )
             }),
         );

@@ -97,7 +97,7 @@ where
 {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
-        stream: BoxStream<'b, T>,
+        stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_with_header = self.has_headers;
@@ -110,29 +110,34 @@ where
         let terminator = self.terminator;
 
         Box::pin({
-            stream.enumerate().map(move |(index, obj)| {
-                let mut writer = csv::WriterBuilder::new()
-                    .has_headers(index == 0 && stream_with_header)
-                    .delimiter(stream_delimiter)
-                    .flexible(stream_flexible)
-                    .quote_style(stream_quote_style)
-                    .quote(stream_quote)
-                    .double_quote(stream_double_quote)
-                    .escape(stream_escape)
-                    .terminator(terminator)
-                    .from_writer(vec![]);
+            stream
+                .enumerate()
+                .map(move |(index, obj_res)| match obj_res {
+                    Err(e) => Err(e),
+                    Ok(obj) => {
+                        let mut writer = csv::WriterBuilder::new()
+                            .has_headers(index == 0 && stream_with_header)
+                            .delimiter(stream_delimiter)
+                            .flexible(stream_flexible)
+                            .quote_style(stream_quote_style)
+                            .quote(stream_quote)
+                            .double_quote(stream_double_quote)
+                            .escape(stream_escape)
+                            .terminator(terminator)
+                            .from_writer(vec![]);
 
-                writer.serialize(obj).map_err(axum::Error::new)?;
-                writer.flush().map_err(axum::Error::new)?;
-                writer
-                    .into_inner()
-                    .map_err(axum::Error::new)
-                    .map(axum::body::Bytes::from)
-            })
+                        writer.serialize(obj).map_err(axum::Error::new)?;
+                        writer.flush().map_err(axum::Error::new)?;
+                        writer
+                            .into_inner()
+                            .map_err(axum::Error::new)
+                            .map(axum::body::Bytes::from)
+                    }
+                })
         })
     }
 
-    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
+    fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
@@ -151,6 +156,18 @@ impl<'a> StreamBodyAs<'a> {
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
+        Self::new(
+            CsvStreamFormat::new(false, b','),
+            stream.map(Ok::<T, axum::Error>),
+        )
+    }
+
+    pub fn csv_with_errors<S, T, E>(stream: S) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error> + 'static,
+    {
         Self::new(CsvStreamFormat::new(false, b','), stream)
     }
 }
@@ -160,6 +177,19 @@ impl StreamBodyAsOptions {
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(
+            CsvStreamFormat::new(false, b','),
+            stream.map(Ok::<T, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn csv_with_errors<'a, S, T, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error> + 'static,
     {
         StreamBodyAs::with_options(CsvStreamFormat::new(false, b','), stream, self)
     }
@@ -197,7 +227,7 @@ mod tests {
             get(|| async {
                 StreamBodyAs::new(
                     CsvStreamFormat::new(false, b'.').with_delimiter(b','),
-                    test_stream,
+                    test_stream.map(Ok::<_, axum::Error>),
                 )
             }),
         );

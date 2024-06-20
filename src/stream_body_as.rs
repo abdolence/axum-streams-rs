@@ -3,8 +3,8 @@ use axum::body::{Body, HttpBody};
 use axum::response::{IntoResponse, Response};
 use bytes::BytesMut;
 use futures::stream::BoxStream;
-use futures::Stream;
 use futures::StreamExt;
+use futures::{Stream, TryStreamExt};
 use http::{HeaderMap, HeaderValue};
 use http_body::Frame;
 use std::fmt::Formatter;
@@ -24,26 +24,28 @@ impl<'a> std::fmt::Debug for StreamBodyAs<'a> {
 
 impl<'a> StreamBodyAs<'a> {
     /// Create a new `StreamBodyWith` providing a stream of your objects in the specified format.
-    pub fn new<S, T, FMT>(stream_format: FMT, stream: S) -> Self
+    pub fn new<S, T, FMT, E>(stream_format: FMT, stream: S) -> Self
     where
         FMT: StreamingFormat<T>,
-        S: Stream<Item = T> + 'a + Send,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
     {
         Self::with_options(stream_format, stream, StreamBodyAsOptions::new())
     }
 
-    pub fn with_options<S, T, FMT>(
+    pub fn with_options<S, T, FMT, E>(
         stream_format: FMT,
         stream: S,
         options: StreamBodyAsOptions,
     ) -> Self
     where
         FMT: StreamingFormat<T>,
-        S: Stream<Item = T> + 'a + Send,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
     {
         Self {
             stream: Self::create_stream_frames(&stream_format, stream, &options),
-            headers: stream_format.http_response_trailers(&options),
+            headers: stream_format.http_response_headers(&options),
         }
     }
 
@@ -62,18 +64,20 @@ impl<'a> StreamBodyAs<'a> {
         self
     }
 
-    fn create_stream_frames<S, T, FMT>(
+    fn create_stream_frames<S, T, FMT, E>(
         stream_format: &FMT,
         stream: S,
         options: &StreamBodyAsOptions,
     ) -> BoxStream<'a, Result<Frame<axum::body::Bytes>, axum::Error>>
     where
         FMT: StreamingFormat<T>,
-        S: Stream<Item = T> + 'a + Send,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
     {
+        let boxed_stream = Box::pin(stream.map_err(|e| e.into()));
         match (options.buffering_ready_items, options.buffering_bytes) {
             (Some(buffering_ready_items), _) => stream_format
-                .to_bytes_stream(Box::pin(stream), options)
+                .to_bytes_stream(boxed_stream, options)
                 .ready_chunks(buffering_ready_items)
                 .map(|chunks| {
                     let mut buf = BytesMut::new();
@@ -84,11 +88,9 @@ impl<'a> StreamBodyAs<'a> {
                 })
                 .boxed(),
             (_, Some(buffering_bytes)) => {
-                let bytes_stream = stream_format
-                    .to_bytes_stream(Box::pin(stream), options)
-                    .chain(futures::stream::once(futures::future::ready(Ok(
-                        bytes::Bytes::new(),
-                    ))));
+                let bytes_stream = stream_format.to_bytes_stream(boxed_stream, options).chain(
+                    futures::stream::once(futures::future::ready(Ok(bytes::Bytes::new()))),
+                );
 
                 bytes_stream
                     .scan(
@@ -116,7 +118,7 @@ impl<'a> StreamBodyAs<'a> {
                     .boxed()
             }
             (None, None) => stream_format
-                .to_bytes_stream(Box::pin(stream), options)
+                .to_bytes_stream(boxed_stream, options)
                 .map(|res| res.map(Frame::data))
                 .boxed(),
         }
@@ -198,7 +200,8 @@ mod tests {
     #[tokio::test]
     async fn test_stream_body_as() {
         let stream = futures::stream::iter(vec!["First".to_string(), "Second".to_string()]).boxed();
-        let stream_body_as = StreamBodyAs::new(TextStreamFormat::new(), stream);
+        let stream_body_as =
+            StreamBodyAs::new(TextStreamFormat::new(), stream.map(Ok::<_, axum::Error>));
         let response = stream_body_as.into_response();
         assert_eq!(
             response.headers().get(http::header::CONTENT_TYPE).unwrap(),
@@ -221,7 +224,7 @@ mod tests {
         .boxed();
         let stream_body_as = StreamBodyAs::with_options(
             TextStreamFormat::new(),
-            stream,
+            stream.map(Ok::<_, axum::Error>),
             StreamBodyAsOptions::new().buffering_ready_items(2),
         );
         let response = stream_body_as.into_response();
@@ -246,7 +249,7 @@ mod tests {
         .boxed();
         let stream_body_as = StreamBodyAs::with_options(
             TextStreamFormat::new(),
-            stream,
+            stream.map(Ok::<_, axum::Error>),
             StreamBodyAsOptions::new().buffering_bytes(3),
         );
         let response = stream_body_as.into_response();

@@ -11,7 +11,7 @@ license = "Apache-2.0"
 name = "axum-streams"
 readme = "README.md"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
-version = "0.16.0"
+version = "0.17.0"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -55,6 +55,8 @@ tower-service = "0.3"
 tokio = { version = "1", features = ["full"] }
 prost = { version= "0.12", features = ["prost-derive"] }
 arrow = { version = "52", features = ["ipc"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3"}
 
 [[example]]
 name = "json-example"
@@ -84,6 +86,11 @@ required-features = ["json"]
 [[example]]
 name = "json-with-buffering"
 path = "examples/json-with-buffering.rs"
+required-features = ["json"]
+
+[[example]]
+name = "json-with-errors-example"
+path = "examples/json-with-errors-example.rs"
 required-features = ["json"]
 
 [[example]]

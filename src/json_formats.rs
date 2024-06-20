@@ -41,27 +41,30 @@ where
 {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
-        stream: BoxStream<'b, T>,
+        stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
-            stream.enumerate().map(|(index, obj)| {
-                let mut buf = BytesMut::new().writer();
+            stream.enumerate().map(|(index, obj_res)| match obj_res {
+                Err(e) => Err(e),
+                Ok(obj) => {
+                    let mut buf = BytesMut::new().writer();
 
-                let sep_write_res = if index != 0 {
-                    buf.write_all(JSON_SEP_BYTES).map_err(axum::Error::new)
-                } else {
-                    Ok(())
-                };
+                    let sep_write_res = if index != 0 {
+                        buf.write_all(JSON_SEP_BYTES).map_err(axum::Error::new)
+                    } else {
+                        Ok(())
+                    };
 
-                match sep_write_res {
-                    Ok(_) => {
-                        match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
-                            Ok(_) => Ok(buf.into_inner().freeze()),
-                            Err(e) => Err(e),
+                    match sep_write_res {
+                        Ok(_) => {
+                            match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
+                                Ok(_) => Ok(buf.into_inner().freeze()),
+                                Err(e) => Err(e),
+                            }
                         }
+                        Err(e) => Err(e),
                     }
-                    Err(e) => Err(e),
                 }
             })
         });
@@ -116,7 +119,7 @@ where
         Box::pin(prepend_stream.chain(stream_bytes.chain(append_stream)))
     }
 
-    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
+    fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
@@ -143,24 +146,27 @@ where
 {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
-        stream: BoxStream<'b, T>,
+        stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         Box::pin({
-            stream.map(|obj| {
-                let mut buf = BytesMut::new().writer();
-                match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
-                    Ok(_) => match buf.write_all(JSON_NL_SEP_BYTES).map_err(axum::Error::new) {
-                        Ok(_) => Ok(buf.into_inner().freeze()),
+            stream.map(|obj_res| match obj_res {
+                Err(e) => Err(e),
+                Ok(obj) => {
+                    let mut buf = BytesMut::new().writer();
+                    match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
+                        Ok(_) => match buf.write_all(JSON_NL_SEP_BYTES).map_err(axum::Error::new) {
+                            Ok(_) => Ok(buf.into_inner().freeze()),
+                            Err(e) => Err(e),
+                        },
                         Err(e) => Err(e),
-                    },
-                    Err(e) => Err(e),
+                    }
                 }
             })
         })
     }
 
-    fn http_response_trailers(&self, _: &StreamBodyAsOptions) -> Option<HeaderMap> {
+    fn http_response_headers(&self, _: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
@@ -183,14 +189,43 @@ impl<'a> crate::StreamBodyAs<'a> {
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
+        Self::new(
+            JsonArrayStreamFormat::new(),
+            stream.map(Ok::<T, axum::Error>),
+        )
+    }
+
+    pub fn json_array_with_errors<S, T, E>(stream: S) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
         Self::new(JsonArrayStreamFormat::new(), stream)
     }
 
-    pub fn json_array_with_envelope<S, T, E>(stream: S, envelope: E, array_field: &str) -> Self
+    pub fn json_array_with_envelope<S, T, EN>(stream: S, envelope: EN, array_field: &str) -> Self
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
-        E: Serialize + Send + Sync + 'static,
+        EN: Serialize + Send + Sync + 'static,
+    {
+        Self::new(
+            JsonArrayStreamFormat::with_envelope(envelope, array_field),
+            stream.map(Ok::<T, axum::Error>),
+        )
+    }
+
+    pub fn json_array_with_envelope_errors<S, T, E, EN>(
+        stream: S,
+        envelope: EN,
+        array_field: &str,
+    ) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+        EN: Serialize + Send + Sync + 'static,
     {
         Self::new(
             JsonArrayStreamFormat::with_envelope(envelope, array_field),
@@ -203,6 +238,18 @@ impl<'a> crate::StreamBodyAs<'a> {
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
+        Self::new(
+            JsonNewLineStreamFormat::new(),
+            stream.map(Ok::<T, axum::Error>),
+        )
+    }
+
+    pub fn json_nl_with_errors<S, T, E>(stream: S) -> Self
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
         Self::new(JsonNewLineStreamFormat::new(), stream)
     }
 }
@@ -213,19 +260,51 @@ impl StreamBodyAsOptions {
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
+        StreamBodyAs::with_options(
+            JsonArrayStreamFormat::new(),
+            stream.map(Ok::<T, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn json_array_with_errors<'a, S, T, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+    {
         StreamBodyAs::with_options(JsonArrayStreamFormat::new(), stream, self)
     }
 
-    pub fn json_array_with_envelope<'a, S, T, E>(
+    pub fn json_array_with_envelope<'a, S, T, EN>(
         self,
         stream: S,
-        envelope: E,
+        envelope: EN,
         array_field: &str,
     ) -> StreamBodyAs<'a>
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
-        E: Serialize + Send + Sync + 'static,
+        EN: Serialize + Send + Sync + 'static,
+    {
+        StreamBodyAs::with_options(
+            JsonArrayStreamFormat::with_envelope(envelope, array_field),
+            stream.map(Ok::<T, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn json_array_with_envelope_errors<'a, S, T, E, EN>(
+        self,
+        stream: S,
+        envelope: EN,
+        array_field: &str,
+    ) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
+        EN: Serialize + Send + Sync + 'static,
     {
         StreamBodyAs::with_options(
             JsonArrayStreamFormat::with_envelope(envelope, array_field),
@@ -238,6 +317,19 @@ impl StreamBodyAsOptions {
     where
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
+    {
+        StreamBodyAs::with_options(
+            JsonNewLineStreamFormat::new(),
+            stream.map(Ok::<T, axum::Error>),
+            self,
+        )
+    }
+
+    pub fn json_nl_with_errors<'a, S, T, E>(self, stream: S) -> StreamBodyAs<'a>
+    where
+        T: Serialize + Send + Sync + 'static,
+        S: Stream<Item = Result<T, E>> + 'a + Send,
+        E: Into<axum::Error>,
     {
         StreamBodyAs::with_options(JsonNewLineStreamFormat::new(), stream, self)
     }
@@ -269,7 +361,12 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async { StreamBodyAs::new(JsonArrayStreamFormat::new(), test_stream) }),
+            get(|| async {
+                StreamBodyAs::new(
+                    JsonArrayStreamFormat::new(),
+                    test_stream.map(Ok::<_, axum::Error>),
+                )
+            }),
         );
 
         let client = TestClient::new(app).await;
@@ -306,7 +403,12 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async { StreamBodyAs::new(JsonNewLineStreamFormat::new(), test_stream) }),
+            get(|| async {
+                StreamBodyAs::new(
+                    JsonNewLineStreamFormat::new(),
+                    test_stream.map(Ok::<_, axum::Error>),
+                )
+            }),
         );
 
         let client = TestClient::new(app).await;
@@ -364,7 +466,7 @@ mod tests {
             get(|| async {
                 StreamBodyAs::new(
                     JsonArrayStreamFormat::with_envelope(test_envelope, "my_array"),
-                    test_stream,
+                    test_stream.map(Ok::<_, axum::Error>),
                 )
             }),
         );
@@ -421,7 +523,7 @@ mod tests {
             get(|| async {
                 StreamBodyAs::new(
                     JsonArrayStreamFormat::with_envelope(test_envelope, "my_array"),
-                    test_stream,
+                    test_stream.map(Ok::<_, axum::Error>),
                 )
             }),
         );
