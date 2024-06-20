@@ -34,6 +34,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, RecordBatch>,
+        _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         fn write_batch(
             ipc_data_gen: &mut IpcDataGenerator,
@@ -110,11 +111,13 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         Box::pin(batch_stream.chain(append_stream))
     }
 
-    fn http_response_trailers(&self) -> Option<HeaderMap> {
+    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/vnd.apache.arrow.stream"),
+            options.content_type.clone().unwrap_or_else(|| {
+                http::header::HeaderValue::from_static("application/vnd.apache.arrow.stream")
+            }),
         );
         Some(header_map)
     }

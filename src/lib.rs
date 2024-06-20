@@ -73,6 +73,7 @@ mod stream_format;
 pub use stream_format::*;
 
 mod stream_body_as;
+pub use self::stream_body_as::HttpHeaderValue;
 pub use self::stream_body_as::StreamBodyAs;
 pub use self::stream_body_as::StreamBodyAsOptions;
 

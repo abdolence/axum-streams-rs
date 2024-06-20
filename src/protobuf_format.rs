@@ -21,6 +21,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
+        _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         fn write_protobuf_record<T>(obj: T) -> Result<Vec<u8>, axum::Error>
         where
@@ -43,11 +44,13 @@ where
         })
     }
 
-    fn http_response_trailers(&self) -> Option<HeaderMap> {
+    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/x-protobuf-stream"),
+            options.content_type.clone().unwrap_or_else(|| {
+                http::header::HeaderValue::from_static("application/x-protobuf-stream")
+            }),
         );
         Some(header_map)
     }
