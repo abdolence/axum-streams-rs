@@ -20,7 +20,7 @@ where
 {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
-        stream: BoxStream<'b, T>,
+        stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         fn write_protobuf_record<T>(obj: T) -> Result<Vec<u8>, axum::Error>
@@ -37,9 +37,12 @@ where
         }
 
         Box::pin({
-            stream.map(move |obj| {
-                let write_protobuf_res = write_protobuf_record(obj);
-                write_protobuf_res.map(axum::body::Bytes::from)
+            stream.map(move |obj_res| match obj_res {
+                Err(e) => Err(e),
+                Ok(obj) => {
+                    let write_protobuf_res = write_protobuf_record(obj);
+                    write_protobuf_res.map(axum::body::Bytes::from)
+                }
             })
         })
     }
@@ -62,7 +65,10 @@ impl<'a> StreamBodyAs<'a> {
         T: prost::Message + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
-        Self::new(ProtobufStreamFormat::new(), stream)
+        Self::new(
+            ProtobufStreamFormat::new(),
+            stream.map(Ok::<T, axum::Error>),
+        )
     }
 }
 
@@ -72,7 +78,11 @@ impl StreamBodyAsOptions {
         T: prost::Message + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
-        StreamBodyAs::with_options(ProtobufStreamFormat::new(), stream, self)
+        StreamBodyAs::with_options(
+            ProtobufStreamFormat::new(),
+            stream.map(Ok::<T, axum::Error>),
+            self,
+        )
     }
 }
 
@@ -107,7 +117,12 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async { StreamBodyAs::new(ProtobufStreamFormat::new(), test_stream) }),
+            get(|| async {
+                StreamBodyAs::new(
+                    ProtobufStreamFormat::new(),
+                    test_stream.map(Ok::<_, axum::Error>),
+                )
+            }),
         );
 
         let client = TestClient::new(app).await;

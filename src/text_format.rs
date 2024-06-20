@@ -17,7 +17,7 @@ impl TextStreamFormat {
 impl StreamingFormat<String> for TextStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
-        stream: BoxStream<'b, String>,
+        stream: BoxStream<'b, Result<String, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         fn write_text_record(obj: String) -> Result<Vec<u8>, axum::Error> {
@@ -25,7 +25,10 @@ impl StreamingFormat<String> for TextStreamFormat {
             Ok(obj_vec)
         }
 
-        Box::pin(stream.map(move |obj| write_text_record(obj).map(|data| data.into())))
+        Box::pin(stream.map(move |obj_res| match obj_res {
+            Err(e) => Err(e),
+            Ok(obj) => write_text_record(obj).map(|data| data.into()),
+        }))
     }
 
     fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
@@ -45,7 +48,10 @@ impl<'a> StreamBodyAs<'a> {
     where
         S: Stream<Item = String> + 'a + Send,
     {
-        Self::new(TextStreamFormat::new(), stream)
+        Self::new(
+            TextStreamFormat::new(),
+            stream.map(Ok::<String, axum::Error>),
+        )
     }
 }
 
@@ -54,7 +60,11 @@ impl StreamBodyAsOptions {
     where
         S: Stream<Item = String> + 'a + Send,
     {
-        StreamBodyAs::with_options(TextStreamFormat::new(), stream, self)
+        StreamBodyAs::with_options(
+            TextStreamFormat::new(),
+            stream.map(Ok::<String, axum::Error>),
+            self,
+        )
     }
 }
 
@@ -92,7 +102,12 @@ mod tests {
 
         let app = Router::new().route(
             "/",
-            get(|| async { StreamBodyAs::new(TextStreamFormat::new(), test_stream) }),
+            get(|| async {
+                StreamBodyAs::new(
+                    TextStreamFormat::new(),
+                    test_stream.map(Ok::<_, axum::Error>),
+                )
+            }),
         );
 
         let client = TestClient::new(app).await;

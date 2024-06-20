@@ -5,7 +5,7 @@ use http::HeaderMap;
 pub trait StreamingFormat<T> {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
-        stream: BoxStream<'b, T>,
+        stream: BoxStream<'b, Result<T, axum::Error>>,
         options: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>>;
 
