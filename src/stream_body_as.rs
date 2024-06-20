@@ -84,12 +84,11 @@ impl<'a> StreamBodyAs<'a> {
                 })
                 .boxed(),
             (_, Some(buffering_bytes)) => {
-                let bytes_stream =
-                    stream_format
-                        .to_bytes_stream(Box::pin(stream), options)
-                        .chain(futures::stream::once(futures::future::ready(Ok(
-                            bytes::Bytes::new(),
-                        ))));
+                let bytes_stream = stream_format
+                    .to_bytes_stream(Box::pin(stream), options)
+                    .chain(futures::stream::once(futures::future::ready(Ok(
+                        bytes::Bytes::new(),
+                    ))));
 
                 bytes_stream
                     .scan(
@@ -147,10 +146,12 @@ impl<'a> HttpBody for StreamBodyAs<'a> {
     }
 }
 
+pub type HttpHeaderValue = http::header::HeaderValue;
+
 pub struct StreamBodyAsOptions {
     pub buffering_ready_items: Option<usize>,
     pub buffering_bytes: Option<usize>,
-    pub content_type: Option<HeaderValue>,
+    pub content_type: Option<HttpHeaderValue>,
 }
 
 impl StreamBodyAsOptions {
@@ -169,6 +170,11 @@ impl StreamBodyAsOptions {
 
     pub fn buffering_bytes(mut self, ready_bytes: usize) -> Self {
         self.buffering_bytes = Some(ready_bytes);
+        self
+    }
+
+    pub fn content_type(mut self, content_type: HttpHeaderValue) -> Self {
+        self.content_type = Some(content_type);
         self
     }
 }

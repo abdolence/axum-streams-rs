@@ -42,7 +42,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-        _: &'a StreamBodyAsOptions
+        _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
             stream.enumerate().map(|(index, obj)| {
@@ -116,11 +116,14 @@ where
         Box::pin(prepend_stream.chain(stream_bytes.chain(append_stream)))
     }
 
-    fn http_response_trailers(&self, _: &StreamBodyAsOptions) -> Option<HeaderMap> {
+    fn http_response_trailers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/json"),
+            options
+                .content_type
+                .clone()
+                .unwrap_or_else(|| http::header::HeaderValue::from_static("application/json")),
         );
         Some(header_map)
     }
@@ -141,7 +144,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
-        _: &'a StreamBodyAsOptions
+        _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         Box::pin({
             stream.map(|obj| {

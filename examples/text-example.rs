@@ -18,7 +18,9 @@ fn source_test_stream() -> impl Stream<Item = String> {
 }
 
 async fn test_text_stream() -> impl IntoResponse {
-    StreamBodyAs::text(source_test_stream())
+    StreamBodyAsOptions::new()
+        .content_type(HttpHeaderValue::from_static("text/plain; charset=utf-8"))
+        .text(source_test_stream());
 }
 
 #[tokio::main]
