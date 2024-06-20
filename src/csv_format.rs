@@ -98,6 +98,7 @@ where
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, T>,
+        _: &'a StreamBodyAsOptions
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         let stream_with_header = self.has_headers;
         let stream_delimiter = self.delimiter;
@@ -131,7 +132,7 @@ where
         })
     }
 
-    fn http_response_trailers(&self) -> Option<HeaderMap> {
+    fn http_response_trailers(&self, _: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,

@@ -42,8 +42,8 @@ impl<'a> StreamBodyAs<'a> {
         S: Stream<Item = T> + 'a + Send,
     {
         Self {
-            stream: Self::create_stream_frames(&stream_format, stream, options),
-            headers: stream_format.http_response_trailers(),
+            stream: Self::create_stream_frames(&stream_format, stream, &options),
+            headers: stream_format.http_response_trailers(&options),
         }
     }
 
@@ -65,7 +65,7 @@ impl<'a> StreamBodyAs<'a> {
     fn create_stream_frames<S, T, FMT>(
         stream_format: &FMT,
         stream: S,
-        options: StreamBodyAsOptions,
+        options: &StreamBodyAsOptions,
     ) -> BoxStream<'a, Result<Frame<axum::body::Bytes>, axum::Error>>
     where
         FMT: StreamingFormat<T>,
@@ -73,7 +73,7 @@ impl<'a> StreamBodyAs<'a> {
     {
         match (options.buffering_ready_items, options.buffering_bytes) {
             (Some(buffering_ready_items), _) => stream_format
-                .to_bytes_stream(Box::pin(stream))
+                .to_bytes_stream(Box::pin(stream), options)
                 .ready_chunks(buffering_ready_items)
                 .map(|chunks| {
                     let mut buf = BytesMut::new();
@@ -86,7 +86,7 @@ impl<'a> StreamBodyAs<'a> {
             (_, Some(buffering_bytes)) => {
                 let bytes_stream =
                     stream_format
-                        .to_bytes_stream(Box::pin(stream))
+                        .to_bytes_stream(Box::pin(stream), options)
                         .chain(futures::stream::once(futures::future::ready(Ok(
                             bytes::Bytes::new(),
                         ))));
@@ -117,7 +117,7 @@ impl<'a> StreamBodyAs<'a> {
                     .boxed()
             }
             (None, None) => stream_format
-                .to_bytes_stream(Box::pin(stream))
+                .to_bytes_stream(Box::pin(stream), options)
                 .map(|res| res.map(Frame::data))
                 .boxed(),
         }
@@ -150,6 +150,7 @@ impl<'a> HttpBody for StreamBodyAs<'a> {
 pub struct StreamBodyAsOptions {
     pub buffering_ready_items: Option<usize>,
     pub buffering_bytes: Option<usize>,
+    pub content_type: Option<HeaderValue>,
 }
 
 impl StreamBodyAsOptions {
@@ -157,6 +158,7 @@ impl StreamBodyAsOptions {
         Self {
             buffering_ready_items: None,
             buffering_bytes: None,
+            content_type: None,
         }
     }
 

@@ -18,6 +18,7 @@ impl StreamingFormat<String> for TextStreamFormat {
     fn to_bytes_stream<'a, 'b>(
         &'a self,
         stream: BoxStream<'b, String>,
+        _: &'a StreamBodyAsOptions
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
         fn write_text_record(obj: String) -> Result<Vec<u8>, axum::Error> {
             let obj_vec = obj.as_bytes().to_vec();
@@ -27,7 +28,7 @@ impl StreamingFormat<String> for TextStreamFormat {
         Box::pin(stream.map(move |obj| write_text_record(obj).map(|data| data.into())))
     }
 
-    fn http_response_trailers(&self) -> Option<HeaderMap> {
+    fn http_response_trailers(&self, _: &StreamBodyAsOptions) -> Option<HeaderMap> {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             http::header::CONTENT_TYPE,
