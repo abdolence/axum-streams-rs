@@ -5,7 +5,6 @@ use axum::Router;
 use futures::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
-use tokio_stream::StreamExt;
 
 use axum_streams::*;
 
@@ -16,6 +15,7 @@ struct MyTestStructure {
 }
 
 fn source_test_stream() -> impl Stream<Item = MyTestStructure> {
+    use tokio_stream::StreamExt;
     // Simulating a stream with a plain vector and throttling to show how it works
     stream::iter(vec![
         MyTestStructure {
@@ -30,13 +30,13 @@ fn source_test_stream() -> impl Stream<Item = MyTestStructure> {
 async fn test_csv_stream() -> impl IntoResponse {
     StreamBodyAs::csv(source_test_stream())
 
-    // Which is the same as:
-    // StreamBodyWith::new(
+    // If you need more control for CSV format, you can use the following code instead of the previous line:
+    // StreamBodyAs::new(
     //     CsvStreamFormat::new(
     //         true, // with_header
     //         b',', // CSV delimiter
     //     ),
-    //     source_test_stream(),
+    //     source_test_stream().map(Ok::<_, axum::Error>),
     // )
 }
 
