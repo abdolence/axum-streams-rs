@@ -35,7 +35,7 @@ async fn test_text_stream() -> impl IntoResponse {
         Field::new("lat", DataType::Float64, false),
         Field::new("lng", DataType::Float64, false),
     ]));
-    StreamBodyAs::arrow_ipc(schema.clone(), source_test_stream(schema.clone()))
+    StreamBodyAs::arrow_ipc(Some(schema.clone()), source_test_stream(schema.clone()))
 }
 
 #[tokio::main]
