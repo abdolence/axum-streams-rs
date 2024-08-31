@@ -57,6 +57,11 @@ prost = { version= "0.13", features = ["prost-derive"] }
 arrow = { version = "52", features = ["ipc"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3"}
+cargo-husky = { version = "1.5", default-features = false, features = ["run-for-all", "prepush-hook", "run-cargo-fmt"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [[example]]
 name = "json-example"
@@ -97,6 +102,3 @@ required-features = ["json"]
 name = "arrow-example"
 path = "examples/arrow-example.rs"
 required-features = ["arrow"]
-
-[build-dependencies]
-cargo-husky = { version = "1.5", default-features = false, features = ["run-for-all", "prepush-hook", "run-cargo-fmt"] }
