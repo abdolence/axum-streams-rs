@@ -46,7 +46,11 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
             let mut writer = BytesMut::new().writer();
 
             if let Some(prepend_schema) = prepend_schema {
-                let encoded_message = ipc_data_gen.schema_to_bytes(&prepend_schema, write_options);
+                let encoded_message = ipc_data_gen.schema_to_bytes_with_dictionary_tracker(
+                    &prepend_schema,
+                    dictionary_tracker,
+                    write_options,
+                );
                 write_message(&mut writer, encoded_message, write_options)?;
             }
 
