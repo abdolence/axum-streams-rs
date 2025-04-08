@@ -21,7 +21,7 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.20", features=["json", "csv", "protobuf", "text"] }
+axum-streams = { version = "0.20", features=["json", "csv", "protobuf", "text", "arrow"] }
 ```
 
 ## Compatibility matrix
@@ -30,8 +30,6 @@ axum-streams = { version = "0.20", features=["json", "csv", "protobuf", "text"] 
 |------|--------------|
 | 0.8  | v0.20+       |
 | 0.7  | v0.11-0.19   |
-| 0.6  | v0.9-v0.10   |
-| 0.5  | 0.7          |
 
 
 
