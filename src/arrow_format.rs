@@ -55,7 +55,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
             }
 
             let (encoded_dictionaries, encoded_message) =
-                ipc_data_gen.encoded_batch(batch, dictionary_tracker, write_options)?;
+                ipc_data_gen.encode(batch, dictionary_tracker, write_options)?;
 
             for encoded_dictionary in encoded_dictionaries {
                 write_message(&mut writer, encoded_dictionary, write_options)?;
