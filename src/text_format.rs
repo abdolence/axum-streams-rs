@@ -94,14 +94,6 @@ mod tests {
 
     #[tokio::test]
     async fn serialize_text_stream_format() {
-        #[derive(Clone, prost::Message)]
-        struct TestOutputStructure {
-            #[prost(string, tag = "1")]
-            foo1: String,
-            #[prost(string, tag = "2")]
-            foo2: String,
-        }
-
         let test_stream_vec = vec![
             String::from("bar1"),
             String::from("bar2"),

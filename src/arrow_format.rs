@@ -3,7 +3,9 @@ use crate::{StreamBodyAs, StreamingFormat};
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use arrow::error::ArrowError;
-use arrow::ipc::writer::{write_message, DictionaryTracker, IpcDataGenerator, IpcWriteOptions};
+use arrow::ipc::writer::{
+    write_message, CompressionContext, DictionaryTracker, IpcDataGenerator, IpcWriteOptions,
+};
 use bytes::{BufMut, BytesMut};
 use futures::stream::BoxStream;
 use futures::Stream;
@@ -39,6 +41,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         fn write_batch(
             ipc_data_gen: &mut IpcDataGenerator,
             dictionary_tracker: &mut DictionaryTracker,
+            compression_context: &mut CompressionContext,
             write_options: &IpcWriteOptions,
             batch: &RecordBatch,
             prepend_schema: Option<Arc<Schema>>,
@@ -54,8 +57,12 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
                 write_message(&mut writer, encoded_message, write_options)?;
             }
 
-            let (encoded_dictionaries, encoded_message) =
-                ipc_data_gen.encode(batch, dictionary_tracker, write_options)?;
+            let (encoded_dictionaries, encoded_message) = ipc_data_gen.encode(
+                batch,
+                dictionary_tracker,
+                write_options,
+                compression_context,
+            )?;
 
             for encoded_dictionary in encoded_dictionaries {
                 write_message(&mut writer, encoded_dictionary, write_options)?;
@@ -81,29 +88,33 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
 
         let ipc_data_gen = IpcDataGenerator::default();
         let dictionary_tracker: DictionaryTracker = DictionaryTracker::new(false);
+        let compression_context = CompressionContext::default();
 
         let batch_stream = Box::pin({
             stream.scan(
-                (ipc_data_gen, dictionary_tracker, 0),
-                move |(ipc_data_gen, dictionary_tracker, idx), batch_res| match batch_res {
-                    Err(e) => futures::future::ready(Some(Err(e))),
-                    Ok(batch) => futures::future::ready({
-                        let prepend_schema = if *idx == 0 {
-                            Some(batch_schema.clone())
-                        } else {
-                            None
-                        };
-                        *idx += 1;
-                        let bytes = write_batch(
-                            ipc_data_gen,
-                            dictionary_tracker,
-                            &batch_options,
-                            &batch,
-                            prepend_schema,
-                        )
-                        .map_err(axum::Error::new);
-                        Some(bytes)
-                    }),
+                (ipc_data_gen, dictionary_tracker, compression_context, 0),
+                move |(ipc_data_gen, dictionary_tracker, compression_context, idx), batch_res| {
+                    match batch_res {
+                        Err(e) => futures::future::ready(Some(Err(e))),
+                        Ok(batch) => futures::future::ready({
+                            let prepend_schema = if *idx == 0 {
+                                Some(batch_schema.clone())
+                            } else {
+                                None
+                            };
+                            *idx += 1;
+                            let bytes = write_batch(
+                                ipc_data_gen,
+                                dictionary_tracker,
+                                compression_context,
+                                &batch_options,
+                                &batch,
+                                prepend_schema,
+                            )
+                            .map_err(axum::Error::new);
+                            Some(bytes)
+                        }),
+                    }
                 },
             )
         });
