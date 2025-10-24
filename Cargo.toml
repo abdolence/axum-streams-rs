@@ -21,7 +21,7 @@ name = "axum_streams"
 path = "src/lib.rs"
 
 [dependencies]
-axum = { version = "0.8" }
+axum = { version = "0.8", default-features = false }
 bytes = "1"
 http = "1"
 http-body = "1"
@@ -42,6 +42,7 @@ arrow = ["dep:arrow"]
 text = []
 
 [dev-dependencies]
+axum = { version = "0.8" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 prost = { version= "0.14", features = ["derive"] }
