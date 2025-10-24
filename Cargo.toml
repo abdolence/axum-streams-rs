@@ -11,7 +11,7 @@ license = "Apache-2.0"
 name = "axum-streams"
 readme = "README.md"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
-version = "0.23.1"
+version = "0.24.0"
 
 [badges]
 maintenance = { status = "actively-developed" }
