@@ -1,4 +1,4 @@
-#![allow(unused_parens, clippy::new_without_default)]
+#![allow(unused_parens, clippy::new_without_default, clippy::needless_lifetimes)]
 #![forbid(unsafe_code)]
 
 //! # axum HTTP streaming body support for different formats:
@@ -66,8 +66,6 @@
 //! There is the same functionality for:
 //! - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
 //!
-
-#![allow(clippy::new_without_default, clippy::needless_lifetimes)]
 
 mod stream_format;
 pub use stream_format::*;
