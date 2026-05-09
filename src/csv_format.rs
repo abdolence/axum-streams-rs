@@ -156,10 +156,7 @@ impl<'a> StreamBodyAs<'a> {
         T: Serialize + Send + Sync + 'static,
         S: Stream<Item = T> + 'a + Send,
     {
-        Self::new(
-            CsvStreamFormat::new(false, b','),
-            stream.map(Ok::<T, axum::Error>),
-        )
+        Self::new(CsvStreamFormat::default(), stream.map(Ok::<T, axum::Error>))
     }
 
     pub fn csv_with_errors<S, T, E>(stream: S) -> Self
