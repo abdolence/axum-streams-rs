@@ -54,6 +54,16 @@ async fn test_json_nl_stream() -> impl IntoResponse {
     StreamBodyAs::json_nl_with_errors(source_test_stream())
 }
 
+async fn test_json_array_stream_with_error_logging() -> impl IntoResponse {
+    // Without `on_error` (or the `tracing` feature) a failing stream just resets the
+    // connection and the cause is never reported anywhere.
+    StreamBodyAsOptions::new()
+        .on_error(|err| {
+            tracing::error!("Stream failed: {err}");
+        })
+        .json_array_with_errors(source_test_stream())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt().with_target(false).init();
@@ -62,7 +72,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/json-array-stream", get(test_json_array_stream))
-        .route("/json-nl-stream", get(test_json_nl_stream));
+        .route("/json-nl-stream", get(test_json_nl_stream))
+        .route(
+            "/json-array-stream-with-error-logging",
+            get(test_json_array_stream_with_error_logging),
+        );
 
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
 

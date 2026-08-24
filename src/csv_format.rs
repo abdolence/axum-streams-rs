@@ -200,6 +200,7 @@ mod tests {
     use axum::{routing::*, Router};
     use futures::stream;
     use std::ops::Add;
+    use std::sync::{Arc, Mutex};
 
     #[tokio::test]
     async fn serialize_csv_stream_format() {
@@ -248,5 +249,57 @@ mod tests {
         let body = res.text().await.unwrap();
 
         assert_eq!(body, expected_csv);
+    }
+
+    #[tokio::test]
+    async fn serialize_csv_stream_format_error_is_reported() {
+        // The scenario from https://github.com/abdolence/axum-streams-rs/issues/63: `csv`
+        // refuses to write headers for a struct containing a sequence, and the resulting
+        // error used to vanish without a trace.
+        #[derive(Debug, Clone, Serialize)]
+        struct TestOutputStructure {
+            foo1: String,
+            nested: Vec<String>,
+        }
+
+        let test_stream = Box::pin(stream::iter(vec![TestOutputStructure {
+            foo1: "bar1".to_string(),
+            nested: vec!["a".to_string(), "b".to_string()],
+        }]));
+
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = captured.clone();
+
+        let app = Router::new().route(
+            "/",
+            get(|| async move {
+                StreamBodyAs::with_options(
+                    // `has_headers` is what triggers the failure in the issue.
+                    CsvStreamFormat::default(),
+                    test_stream.map(Ok::<_, axum::Error>),
+                    StreamBodyAsOptions::new().on_error(move |err| {
+                        sink.lock().unwrap().push(err.to_string());
+                    }),
+                )
+            }),
+        );
+
+        let client = TestClient::new(app).await;
+        // The response is aborted, so the request itself fails: this is exactly what the
+        // issue reporter saw, with no indication anywhere of the underlying cause.
+        match client.get("/").send().await {
+            Ok(res) => {
+                let _ = res.text().await;
+            }
+            Err(err) => assert!(err.is_request() || err.is_body()),
+        }
+
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 1);
+        assert!(
+            captured[0].contains("cannot serialize sequence container inside struct"),
+            "unexpected error reported: {}",
+            captured[0]
+        );
     }
 }

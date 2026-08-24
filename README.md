@@ -21,7 +21,7 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.26", features=["json", "csv", "protobuf", "text", "arrow"] }
+axum-streams = { version = "0.27", features=["json", "csv", "protobuf", "text", "arrow"] }
 ```
 
 ## Compatibility matrix
@@ -118,6 +118,37 @@ async fn test_json_array_stream() -> impl IntoResponse {
 }
 
 ```
+
+### Observing errors
+
+An error that happens mid-stream cannot be turned into an HTTP status code: the status and
+headers have already been sent, so the response can only be terminated abnormally. Clients
+(browsers, cURL, hyper) do detect this, but by default nothing tells you *why* it happened.
+
+Use `on_error` to observe them. It is called for every error, both those coming from your
+source stream and serialization errors produced by the format itself:
+
+```rust
+    StreamBodyAsOptions::new()
+        .on_error(|err| tracing::error!("Stream failed: {err}"))
+        .json_array(source_test_stream())
+```
+
+Alternatively, enable the `tracing` feature to have the library log them for you:
+
+```toml
+axum-streams = { version = "0.27", features = ["json", "tracing"] }
+```
+
+Errors are then logged at the `ERROR` level on the `axum_streams` target, so they can be
+filtered with the usual `RUST_LOG=axum_streams=off`. Both the log event and your `on_error`
+callback fire when the feature is enabled and a callback is set.
+
+Two things worth knowing:
+- Bytes that were buffered but not yet flushed are discarded when an error occurs.
+- If the client needs to distinguish a failed response from a complete one, model the failure
+  in the item type itself (for example an untagged enum with an `error` variant), since a
+  truncated response cannot carry that information reliably.
 
 ## JSON array inside another object
 Sometimes you need to include your array inside some object, e.g.:

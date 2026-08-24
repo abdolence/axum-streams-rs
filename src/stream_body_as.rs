@@ -9,6 +9,7 @@ use http::{HeaderMap, HeaderValue};
 use http_body::Frame;
 use std::fmt::Formatter;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 pub struct StreamBodyAs<'a> {
@@ -64,6 +65,38 @@ impl<'a> StreamBodyAs<'a> {
         self
     }
 
+    /// Reports every error passing through the body exactly once, before the buffering
+    /// logic below can collapse or drop it.
+    ///
+    /// This is the single point every error reaches: each format forwards source errors
+    /// verbatim and adds its own serialization errors to the same stream, so no format
+    /// needs to know about reporting.
+    fn report_errors(
+        stream: BoxStream<'a, Result<axum::body::Bytes, axum::Error>>,
+        options: &StreamBodyAsOptions,
+    ) -> BoxStream<'a, Result<axum::body::Bytes, axum::Error>> {
+        let handler = options.on_error.clone();
+
+        if handler.is_none() && !cfg!(feature = "tracing") {
+            return stream;
+        }
+
+        stream
+            .inspect_err(move |err| {
+                #[cfg(feature = "tracing")]
+                tracing::error!(
+                    target: "axum_streams",
+                    error = %err,
+                    "An error occurred while streaming an HTTP body; the response will be terminated abnormally"
+                );
+
+                if let Some(handler) = &handler {
+                    handler(err);
+                }
+            })
+            .boxed()
+    }
+
     fn create_stream_frames<S, T, FMT, E>(
         stream_format: &FMT,
         stream: S,
@@ -75,9 +108,13 @@ impl<'a> StreamBodyAs<'a> {
         E: Into<axum::Error>,
     {
         let boxed_stream = Box::pin(stream.map_err(|e| e.into()));
+        let bytes_stream = Self::report_errors(
+            stream_format.to_bytes_stream(boxed_stream, options),
+            options,
+        );
+
         match (options.buffering_ready_items, options.buffering_bytes) {
-            (Some(buffering_ready_items), _) => stream_format
-                .to_bytes_stream(boxed_stream, options)
+            (Some(buffering_ready_items), _) => bytes_stream
                 .ready_chunks(buffering_ready_items)
                 .map(|chunks| {
                     let mut buf = BytesMut::new();
@@ -88,9 +125,9 @@ impl<'a> StreamBodyAs<'a> {
                 })
                 .boxed(),
             (_, Some(buffering_bytes)) => {
-                let bytes_stream = stream_format.to_bytes_stream(boxed_stream, options).chain(
-                    futures::stream::once(futures::future::ready(Ok(bytes::Bytes::new()))),
-                );
+                let bytes_stream = bytes_stream.chain(futures::stream::once(
+                    futures::future::ready(Ok(bytes::Bytes::new())),
+                ));
 
                 bytes_stream
                     .scan(
@@ -130,10 +167,7 @@ impl<'a> StreamBodyAs<'a> {
                     .flat_map(|res| futures::stream::iter(res).boxed())
                     .boxed()
             }
-            (None, None) => stream_format
-                .to_bytes_stream(boxed_stream, options)
-                .map(|res| res.map(Frame::data))
-                .boxed(),
+            (None, None) => bytes_stream.map(|res| res.map(Frame::data)).boxed(),
         }
     }
 }
@@ -163,10 +197,14 @@ impl<'a> HttpBody for StreamBodyAs<'a> {
 
 pub type HttpHeaderValue = http::header::HeaderValue;
 
+/// A callback invoked for every error produced while streaming an HTTP body.
+pub type StreamBodyAsErrorHandler = Arc<dyn Fn(&axum::Error) + Send + Sync + 'static>;
+
 pub struct StreamBodyAsOptions {
     pub buffering_ready_items: Option<usize>,
     pub buffering_bytes: Option<usize>,
     pub content_type: Option<HttpHeaderValue>,
+    pub on_error: Option<StreamBodyAsErrorHandler>,
 }
 
 impl StreamBodyAsOptions {
@@ -175,6 +213,7 @@ impl StreamBodyAsOptions {
             buffering_ready_items: None,
             buffering_bytes: None,
             content_type: None,
+            on_error: None,
         }
     }
 
@@ -192,6 +231,21 @@ impl StreamBodyAsOptions {
         self.content_type = Some(content_type);
         self
     }
+
+    /// Registers a callback invoked for every error produced while streaming the body,
+    /// covering both errors coming from your source stream and serialization errors
+    /// produced by the format itself.
+    ///
+    /// The error still terminates the response; this is purely an observation hook.
+    /// It does not replace the `tracing` feature: when that feature is enabled both the
+    /// log event and this callback fire.
+    pub fn on_error<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&axum::Error) + Send + Sync + 'static,
+    {
+        self.on_error = Some(Arc::new(handler));
+        self
+    }
 }
 
 #[cfg(test)]
@@ -201,6 +255,8 @@ mod tests {
     use crate::TextStreamFormat;
     use bytes::Bytes;
     use futures::TryStreamExt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     /// A format that fails on a chosen item, so the error paths can be exercised without
     /// depending on any of the optional format features.
@@ -357,5 +413,100 @@ mod tests {
         assert!(stream.next().await.unwrap().is_err());
         // No trailing flush frame may follow the error.
         assert!(stream.next().await.is_none());
+    }
+
+    async fn drain(body: StreamBodyAs<'static>) {
+        let _: Result<Vec<Bytes>, axum::Error> = body
+            .into_response()
+            .into_body()
+            .into_data_stream()
+            .try_collect()
+            .await;
+    }
+
+    fn counting_options(counter: &Arc<AtomicUsize>) -> StreamBodyAsOptions {
+        let counter = counter.clone();
+        StreamBodyAsOptions::new().on_error(move |_| {
+            counter.fetch_add(1, Ordering::SeqCst);
+        })
+    }
+
+    #[tokio::test]
+    async fn test_on_error_called_once_unbuffered() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        drain(failing_body(1, counting_options(&counter))).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_on_error_called_once_buffering_ready_items() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        drain(failing_body(
+            1,
+            counting_options(&counter).buffering_ready_items(2),
+        ))
+        .await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_on_error_called_once_buffering_bytes() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        drain(failing_body(
+            1,
+            counting_options(&counter).buffering_bytes(3),
+        ))
+        .await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_on_error_not_called_on_success() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        // No item fails, so the handler must never run.
+        drain(failing_body(usize::MAX, counting_options(&counter))).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_on_error_receives_error_message() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = captured.clone();
+        let options = StreamBodyAsOptions::new().on_error(move |err| {
+            sink.lock().unwrap().push(err.to_string());
+        });
+
+        drain(failing_body(1, options)).await;
+
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 1);
+        assert!(captured[0].contains(FailingFormat::ERROR_MESSAGE));
+    }
+
+    #[tokio::test]
+    async fn test_on_error_reports_errors_ready_chunks_collapses() {
+        // Both errors land in the same `ready_chunks` batch, where only the first can reach
+        // the client. The hook still observes both, which is the point of the hook.
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counted = counter.clone();
+        let stream = futures::stream::iter(vec![
+            Ok("aaa".to_string()),
+            Err(axum::Error::new("first")),
+            Err(axum::Error::new("second")),
+        ]);
+        let body = StreamBodyAs::with_options(
+            FailingFormat {
+                fail_at_index: usize::MAX,
+            },
+            stream,
+            StreamBodyAsOptions::new()
+                .buffering_ready_items(4)
+                .on_error(move |_| {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                }),
+        );
+
+        drain(body).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 }
