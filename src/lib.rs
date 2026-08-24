@@ -69,6 +69,25 @@
 //! [`StreamBodyAsOptions::on_error`] to observe those errors, or enable the `tracing`
 //! feature to have them logged at the `ERROR` level on the `axum_streams` target.
 //!
+//! # Observing stream progress
+//!
+//! The body is polled after your handler has returned, so nothing in the handler can report
+//! how much of the response actually went out. Enable the `tracing` feature and every body
+//! reports its totals once it ends, at `INFO`, on an `axum_streams::stream_body` span. Its
+//! `items`, `bytes`, `elapsed_ms` and `outcome` are recorded as span fields, so collectors
+//! read them as structured values. At `DEBUG` a long-running body additionally reports
+//! progress about once a second.
+//!
+//! The `outcome` separates a `completed` response from an `aborted` one, meaning the client
+//! hung up mid-stream. A `failed` body reports at `ERROR` instead.
+//!
+//! [`StreamBodyAsOptions::on_progress`] exposes the same accounting as a callback for metrics,
+//! and [`StreamBodyAsOptions::progress_interval`] / [`StreamBodyAsOptions::progress_items`]
+//! control how often it is reported. Nothing is counted unless one of the two is listening.
+//!
+//! `items` counts the objects successfully read from your source stream, and an item is
+//! whatever the format consumes: for the Arrow format that is a `RecordBatch`, not a row.
+//!
 //! ## Need client support?
 //! There is the same functionality for:
 //! - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
@@ -80,7 +99,11 @@ pub use stream_format::*;
 mod stream_body_as;
 pub use self::stream_body_as::HttpHeaderValue;
 pub use self::stream_body_as::StreamBodyAs;
+pub use self::stream_body_as::StreamBodyAsErrorHandler;
 pub use self::stream_body_as::StreamBodyAsOptions;
+
+mod progress;
+pub use progress::{StreamBodyAsProgressHandler, StreamBodyOutcome, StreamProgress};
 
 mod envelope;
 pub use envelope::*;

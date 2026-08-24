@@ -96,9 +96,8 @@ where
                                 Err(e) => Err(axum::Error::new(e)),
                             }
                         }
-                        Ok(envelope_bytes) => Err(axum::Error::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Too short envelope: {:?}", envelope_bytes),
+                        Ok(envelope_bytes) => Err(axum::Error::new(std::io::Error::other(
+                            format!("Too short envelope: {envelope_bytes:?}"),
                         ))),
                         Err(e) => Err(axum::Error::new(e)),
                     }
@@ -129,6 +128,10 @@ where
                 .unwrap_or_else(|| http::header::HeaderValue::from_static("application/json")),
         );
         Some(header_map)
+    }
+
+    fn format_name(&self) -> Option<&str> {
+        Some("json_array")
     }
 }
 
@@ -173,6 +176,10 @@ where
             http::header::HeaderValue::from_static("application/jsonstream"),
         );
         Some(header_map)
+    }
+
+    fn format_name(&self) -> Option<&str> {
+        Some("json_nl")
     }
 }
 

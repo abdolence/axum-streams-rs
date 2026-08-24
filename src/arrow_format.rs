@@ -137,6 +137,10 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         );
         Some(header_map)
     }
+
+    fn format_name(&self) -> Option<&str> {
+        Some("arrow")
+    }
 }
 
 impl<'a> crate::StreamBodyAs<'a> {

@@ -21,7 +21,7 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.27", features=["json", "csv", "protobuf", "text", "arrow"] }
+axum-streams = { version = "0.28", features=["json", "csv", "protobuf", "text", "arrow"] }
 ```
 
 ## Compatibility matrix
@@ -137,7 +137,7 @@ source stream and serialization errors produced by the format itself:
 Alternatively, enable the `tracing` feature to have the library log them for you:
 
 ```toml
-axum-streams = { version = "0.27", features = ["json", "tracing"] }
+axum-streams = { version = "0.28", features = ["json", "tracing"] }
 ```
 
 Errors are then logged at the `ERROR` level on the `axum_streams` target, so they can be
@@ -149,6 +149,71 @@ Two things worth knowing:
 - If the client needs to distinguish a failed response from a complete one, model the failure
   in the item type itself (for example an untagged enum with an `error` variant), since a
   truncated response cannot carry that information reliably.
+
+### Observing progress
+
+A streaming response is polled after your handler has already returned, so nothing in the
+handler can tell you how much of it actually went out. Enable the `tracing` feature to have the
+library report that for you:
+
+```toml
+axum-streams = { version = "0.28", features = ["json", "tracing"] }
+```
+
+At `INFO` every response reports its totals once, when it ends:
+
+```text
+INFO axum_streams::stream_body{format="json_array" items=1000 bytes=28001 elapsed_ms=11239 outcome="completed"}: Finished streaming an HTTP body items=1000 bytes=28001 elapsed_ms=11239 outcome="completed"
+```
+
+The `outcome` tells apart the three ways a response can end: `completed`, `aborted` (the
+client went away mid-stream, which is otherwise invisible), and `failed`, which reports at
+`ERROR` instead, alongside the error itself.
+
+Raise it to `RUST_LOG=axum_streams=debug` and long-running responses additionally report
+progress about once a second:
+
+```text
+DEBUG axum_streams::stream_body{format="json_array"}: Streaming an HTTP body items=91 bytes=2548 elapsed_ms=1008
+DEBUG axum_streams::stream_body{format="json_array"}: Streaming an HTTP body items=182 bytes=5096 elapsed_ms=2018
+INFO  axum_streams::stream_body{format="json_array" items=358 bytes=10024 elapsed_ms=4000 outcome="aborted"}: Finished streaming an HTTP body items=358 bytes=10024 elapsed_ms=4000 outcome="aborted"
+```
+
+Everything is recorded on an `axum_streams::stream_body` span, created while your handler's
+request span is still current, so collectors nest it under the request and read `items`,
+`bytes`, `elapsed_ms` and `outcome` as span attributes rather than as log text. Use
+`axum_streams=trace` to additionally get an event per frame.
+
+Reporting is time-based by default, so the number of lines is bound by how long a response runs
+and not by how much it carries. Both triggers are configurable, and progress is also reported
+whenever the item count crosses a step if you ask for one:
+
+```rust
+    StreamBodyAsOptions::new()
+        .progress_interval(std::time::Duration::from_secs(5))
+        .progress_items(100_000)
+        .json_array(source_test_stream())
+```
+
+The same accounting is available without tracing, for metrics:
+
+```rust
+    StreamBodyAsOptions::new()
+        .on_progress(|progress| {
+            if progress.outcome != StreamBodyOutcome::InProgress {
+                metrics::counter!("streamed_bytes").increment(progress.bytes);
+            }
+        })
+        .json_array(source_test_stream())
+```
+
+`items` counts the objects successfully read from your source stream, so an item that failed is
+not counted, and an item is whatever the format consumes: for the Arrow format that is a
+`RecordBatch`, not a row. `bytes` counts what reached the HTTP layer, which is why it can be
+lower than what was serialized when `buffering_bytes` discards a partial buffer on error.
+
+Nothing is counted at all unless something is listening: with no `on_progress` callback and no
+subscriber interested in `axum_streams` at all, the stream pipeline is left untouched.
 
 ## JSON array inside another object
 Sometimes you need to include your array inside some object, e.g.:
