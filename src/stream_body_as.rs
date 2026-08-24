@@ -22,7 +22,10 @@ pub struct StreamBodyAs<'a> {
 
 impl<'a> std::fmt::Debug for StreamBodyAs<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "StreamBodyWithFormat")
+        // The stream itself cannot be shown, hence the elision; the headers can.
+        f.debug_struct("StreamBodyAs")
+            .field("headers", &self.headers)
+            .finish_non_exhaustive()
     }
 }
 
@@ -750,5 +753,15 @@ mod tests {
             snapshots.len() - 1,
             "nothing may follow the terminal snapshot: {snapshots:?}"
         );
+    }
+
+    #[cfg(feature = "text")]
+    #[test]
+    fn test_debug_names_the_type() {
+        let stream = futures::stream::iter(vec!["First".to_string()]);
+        let body = StreamBodyAs::new(TextStreamFormat::new(), stream.map(Ok::<_, axum::Error>));
+        let rendered = format!("{body:?}");
+        assert!(rendered.starts_with("StreamBodyAs"), "got: {rendered}");
+        assert!(rendered.contains("headers"), "got: {rendered}");
     }
 }
