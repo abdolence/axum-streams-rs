@@ -1,4 +1,6 @@
+use crate::progress::{ProgressStream, StreamProgressState};
 use crate::stream_format::StreamingFormat;
+use crate::{StreamBodyAsProgressHandler, StreamProgress};
 use axum::body::{Body, HttpBody};
 use axum::response::{IntoResponse, Response};
 use bytes::BytesMut;
@@ -11,6 +13,7 @@ use std::fmt::Formatter;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 pub struct StreamBodyAs<'a> {
     stream: BoxStream<'a, Result<Frame<axum::body::Bytes>, axum::Error>>,
@@ -107,13 +110,28 @@ impl<'a> StreamBodyAs<'a> {
         S: Stream<Item = Result<T, E>> + 'a + Send,
         E: Into<axum::Error>,
     {
-        let boxed_stream = Box::pin(stream.map_err(|e| e.into()));
+        let progress = StreamProgressState::maybe_new(stream_format.format_name(), options);
+
+        // Items only exist as items before the format consumes them, and every format maps
+        // them one-to-one, so this is where they can be counted.
+        let boxed_stream: BoxStream<'a, Result<T, axum::Error>> = match &progress {
+            Some(state) => {
+                let state = state.clone();
+                Box::pin(
+                    stream
+                        .map_err(|e| e.into())
+                        .inspect_ok(move |_| state.record_item()),
+                )
+            }
+            None => Box::pin(stream.map_err(|e| e.into())),
+        };
+
         let bytes_stream = Self::report_errors(
             stream_format.to_bytes_stream(boxed_stream, options),
             options,
         );
 
-        match (options.buffering_ready_items, options.buffering_bytes) {
+        let frame_stream = match (options.buffering_ready_items, options.buffering_bytes) {
             (Some(buffering_ready_items), _) => bytes_stream
                 .ready_chunks(buffering_ready_items)
                 .map(|chunks| {
@@ -168,6 +186,14 @@ impl<'a> StreamBodyAs<'a> {
                     .boxed()
             }
             (None, None) => bytes_stream.map(|res| res.map(Frame::data)).boxed(),
+        };
+
+        // Wrapping the outermost stream keeps the byte count honest (it counts what actually
+        // reached the HTTP layer) and makes this adapter's `Drop` coincide with the body's,
+        // which is the only way to notice a client that hung up mid-stream.
+        match progress {
+            Some(state) => ProgressStream::new(frame_stream, state).boxed(),
+            None => frame_stream,
         }
     }
 }
@@ -200,11 +226,24 @@ pub type HttpHeaderValue = http::header::HeaderValue;
 /// A callback invoked for every error produced while streaming an HTTP body.
 pub type StreamBodyAsErrorHandler = Arc<dyn Fn(&axum::Error) + Send + Sync + 'static>;
 
+/// How often progress is reported when it is not otherwise configured.
+///
+/// Time-based rather than item-based on purpose: the volume of progress reports is then bound
+/// by how long the stream runs and not by how much it carries, so even a multi-million item
+/// stream cannot flood the logs.
+const DEFAULT_PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Build these with [`StreamBodyAsOptions::new`] and the setters below rather than with a
+/// struct literal, so that later options can be added without breaking you.
+#[non_exhaustive]
 pub struct StreamBodyAsOptions {
     pub buffering_ready_items: Option<usize>,
     pub buffering_bytes: Option<usize>,
     pub content_type: Option<HttpHeaderValue>,
     pub on_error: Option<StreamBodyAsErrorHandler>,
+    pub on_progress: Option<StreamBodyAsProgressHandler>,
+    pub progress_interval: Option<Duration>,
+    pub progress_items: Option<u64>,
 }
 
 impl StreamBodyAsOptions {
@@ -214,6 +253,9 @@ impl StreamBodyAsOptions {
             buffering_bytes: None,
             content_type: None,
             on_error: None,
+            on_progress: None,
+            progress_interval: Some(DEFAULT_PROGRESS_INTERVAL),
+            progress_items: None,
         }
     }
 
@@ -246,11 +288,48 @@ impl StreamBodyAsOptions {
         self.on_error = Some(Arc::new(handler));
         self
     }
+
+    /// Registers a callback receiving progress snapshots while the body is streamed: one per
+    /// reporting interval or item step, plus a final one carrying the totals and how the body
+    /// ended (completed, failed, or aborted because the client went away).
+    ///
+    /// This is the same accounting the `tracing` feature reports, exposed for metrics: wire it
+    /// to a counter and you get streamed items and bytes without depending on tracing at all.
+    /// When the feature is enabled both happen.
+    ///
+    /// The counters are only maintained when someone is listening, so a body with no callback
+    /// and no `tracing` subscriber interested in `axum_streams` pays nothing for this.
+    pub fn on_progress<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&StreamProgress) + Send + Sync + 'static,
+    {
+        self.on_progress = Some(Arc::new(handler));
+        self
+    }
+
+    /// Reports progress at most once per `interval` (one second by default).
+    ///
+    /// Set the field to `None` directly to report on item steps only.
+    pub fn progress_interval(mut self, interval: Duration) -> Self {
+        self.progress_interval = Some(interval);
+        self
+    }
+
+    /// Additionally reports progress every `items` items.
+    ///
+    /// Off by default, and deliberately so: it is a linear step, so a large stream reports a
+    /// number of times proportional to its size. Prefer [`Self::progress_interval`] unless you
+    /// specifically want item-granular checkpoints.
+    pub fn progress_items(mut self, items: u64) -> Self {
+        self.progress_items = Some(items);
+        self
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::StreamBodyOutcome;
     #[cfg(feature = "text")]
     use crate::TextStreamFormat;
     use bytes::Bytes;
@@ -424,6 +503,31 @@ mod tests {
             .await;
     }
 
+    /// A body of `count` three-byte items that never fails.
+    fn text_body(count: usize, options: StreamBodyAsOptions) -> StreamBodyAs<'static> {
+        let stream = futures::stream::iter((0..count).map(|index| format!("{index:03}")));
+        StreamBodyAs::with_options(
+            FailingFormat {
+                fail_at_index: usize::MAX,
+            },
+            stream.map(Ok::<_, axum::Error>),
+            options,
+        )
+    }
+
+    type ProgressSink = Arc<Mutex<Vec<crate::StreamProgress>>>;
+
+    fn recording_options(sink: &ProgressSink) -> StreamBodyAsOptions {
+        let sink = sink.clone();
+        StreamBodyAsOptions::new().on_progress(move |progress| {
+            sink.lock().unwrap().push(*progress);
+        })
+    }
+
+    fn snapshots(sink: &ProgressSink) -> Vec<crate::StreamProgress> {
+        sink.lock().unwrap().clone()
+    }
+
     fn counting_options(counter: &Arc<AtomicUsize>) -> StreamBodyAsOptions {
         let counter = counter.clone();
         StreamBodyAsOptions::new().on_error(move |_| {
@@ -508,5 +612,143 @@ mod tests {
 
         drain(body).await;
         assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn test_on_progress_reports_the_totals() {
+        // Three three-byte items, each its own frame.
+        for options in [
+            StreamBodyAsOptions::new(),
+            StreamBodyAsOptions::new().buffering_ready_items(2),
+            StreamBodyAsOptions::new().buffering_bytes(3),
+        ] {
+            let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+            let recorded = sink.clone();
+            let options = options.on_progress(move |progress| {
+                recorded.lock().unwrap().push(*progress);
+            });
+
+            drain(text_body(3, options)).await;
+
+            let snapshots = snapshots(&sink);
+            let last = snapshots
+                .last()
+                .expect("a final snapshot is always reported");
+            assert_eq!(last.items, 3);
+            assert_eq!(last.bytes, 9);
+            assert_eq!(last.outcome, StreamBodyOutcome::Completed);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_on_progress_stays_quiet_for_a_short_stream() {
+        // The whole point of the defaults: an ordinary small stream reports once, at the end.
+        let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+        drain(text_body(3, recording_options(&sink))).await;
+
+        let snapshots = snapshots(&sink);
+        assert_eq!(snapshots.len(), 1, "unexpected snapshots: {snapshots:?}");
+        assert_eq!(snapshots[0].outcome, StreamBodyOutcome::Completed);
+    }
+
+    #[tokio::test]
+    async fn test_on_progress_reports_failure_with_partial_totals() {
+        let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+        drain(failing_body(1, recording_options(&sink))).await;
+
+        let snapshots = snapshots(&sink);
+        let last = snapshots.last().unwrap();
+        assert_eq!(last.outcome, StreamBodyOutcome::Failed);
+        // Only the first item made it out before the second one failed to serialize.
+        assert_eq!(last.items, 2);
+        assert_eq!(last.bytes, 3);
+    }
+
+    #[tokio::test]
+    async fn test_on_progress_reports_a_client_that_hung_up() {
+        let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+        let mut stream = text_body(3, recording_options(&sink))
+            .into_response()
+            .into_body()
+            .into_data_stream();
+
+        assert_eq!(stream.next().await.unwrap().unwrap(), Bytes::from("000"));
+        drop(stream);
+
+        let snapshots = snapshots(&sink);
+        let last = snapshots.last().unwrap();
+        assert_eq!(last.outcome, StreamBodyOutcome::Aborted);
+        assert_eq!(last.items, 1);
+        assert_eq!(last.bytes, 3);
+    }
+
+    #[tokio::test]
+    async fn test_progress_items_reports_on_every_step() {
+        let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+        drain(text_body(4, recording_options(&sink).progress_items(2))).await;
+
+        let in_progress: Vec<u64> = snapshots(&sink)
+            .iter()
+            .filter(|progress| progress.outcome == StreamBodyOutcome::InProgress)
+            .map(|progress| progress.items)
+            .collect();
+        assert_eq!(in_progress, vec![2, 4]);
+    }
+
+    #[tokio::test]
+    async fn test_progress_interval_zero_reports_on_every_frame() {
+        let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+        drain(text_body(
+            3,
+            recording_options(&sink).progress_interval(Duration::ZERO),
+        ))
+        .await;
+
+        let in_progress = snapshots(&sink)
+            .iter()
+            .filter(|progress| progress.outcome == StreamBodyOutcome::InProgress)
+            .count();
+        assert_eq!(in_progress, 3);
+    }
+
+    #[tokio::test]
+    async fn test_progress_items_zero_is_treated_as_disabled() {
+        // A step of zero must not turn into an event per frame, or worse, a loop.
+        let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+        drain(text_body(3, recording_options(&sink).progress_items(0))).await;
+
+        assert_eq!(snapshots(&sink).len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_no_progress_is_reported_after_the_final_snapshot() {
+        // `buffering_ready_items` does not stop the underlying stream on error, so a consumer
+        // polling past it still receives frames. Reporting one would put a progress snapshot
+        // after the terminal one.
+        let sink: ProgressSink = Arc::new(Mutex::new(Vec::new()));
+        let body = failing_body(
+            1,
+            recording_options(&sink)
+                .buffering_ready_items(1)
+                .progress_interval(Duration::ZERO),
+        );
+        let mut stream = body.into_response().into_body().into_data_stream();
+
+        let mut frames = 0;
+        while stream.next().await.is_some() {
+            frames += 1;
+            assert!(frames < 8, "the probe stream should be short");
+        }
+
+        let snapshots = snapshots(&sink);
+        let terminal = snapshots
+            .iter()
+            .position(|progress| progress.outcome != StreamBodyOutcome::InProgress)
+            .expect("a terminal snapshot is always reported");
+        assert_eq!(
+            terminal,
+            snapshots.len() - 1,
+            "nothing may follow the terminal snapshot: {snapshots:?}"
+        );
     }
 }

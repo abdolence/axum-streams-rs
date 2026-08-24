@@ -57,6 +57,10 @@ where
         );
         Some(header_map)
     }
+
+    fn format_name(&self) -> Option<&str> {
+        Some("protobuf")
+    }
 }
 
 impl<'a> StreamBodyAs<'a> {

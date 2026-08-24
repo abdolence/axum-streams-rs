@@ -41,6 +41,10 @@ impl StreamingFormat<String> for TextStreamFormat {
         );
         Some(header_map)
     }
+
+    fn format_name(&self) -> Option<&str> {
+        Some("text")
+    }
 }
 
 impl<'a> StreamBodyAs<'a> {

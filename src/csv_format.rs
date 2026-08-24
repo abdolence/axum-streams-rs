@@ -148,6 +148,10 @@ where
         );
         Some(header_map)
     }
+
+    fn format_name(&self) -> Option<&str> {
+        Some("csv")
+    }
 }
 
 impl<'a> StreamBodyAs<'a> {

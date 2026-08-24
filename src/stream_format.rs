@@ -10,4 +10,12 @@ pub trait StreamingFormat<T> {
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>>;
 
     fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap>;
+
+    /// A short, stable name for this format, reported as the `format` field of the tracing
+    /// span covering the body.
+    ///
+    /// `None` leaves the field unset rather than reporting a placeholder.
+    fn format_name(&self) -> Option<&str> {
+        None
+    }
 }
