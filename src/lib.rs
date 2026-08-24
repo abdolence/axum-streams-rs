@@ -110,6 +110,16 @@
 //! - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
 //!
 
+// Only the format modules drive the encoding pipeline, so with no format enabled there is
+// nothing to compile it for. Without this gate a dependency on the crate's default features
+// warns about three unused functions.
+#[cfg(any(
+    feature = "json",
+    feature = "csv",
+    feature = "protobuf",
+    feature = "arrow",
+    feature = "text"
+))]
 mod stream_encoding;
 mod stream_format;
 pub use stream_format::*;
