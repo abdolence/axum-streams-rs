@@ -4,7 +4,7 @@ use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use arrow::error::ArrowError;
 use arrow::ipc::writer::{
-    write_message, CompressionContext, DictionaryTracker, IpcDataGenerator, IpcWriteOptions,
+    write_message, DictionaryTracker, IpcDataGenerator, IpcWriteContext, IpcWriteOptions,
 };
 use bytes::{BufMut, BytesMut};
 use futures::stream::BoxStream;
@@ -41,7 +41,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         fn write_batch(
             ipc_data_gen: &mut IpcDataGenerator,
             dictionary_tracker: &mut DictionaryTracker,
-            compression_context: &mut CompressionContext,
+            compression_context: &mut IpcWriteContext,
             write_options: &IpcWriteOptions,
             batch: &RecordBatch,
             prepend_schema: Option<Arc<Schema>>,
@@ -88,7 +88,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
 
         let ipc_data_gen = IpcDataGenerator::default();
         let dictionary_tracker: DictionaryTracker = DictionaryTracker::new(false);
-        let compression_context = CompressionContext::default();
+        let compression_context = IpcWriteContext::default();
 
         let batch_stream = Box::pin({
             stream.scan(

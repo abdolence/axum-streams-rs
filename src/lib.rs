@@ -62,6 +62,13 @@
 //! }
 //!
 //! ```
+//! # Observing stream errors
+//!
+//! An error occurring mid-stream cannot become an HTTP status code, since the status and
+//! headers are already sent; the response is terminated abnormally instead. Use
+//! [`StreamBodyAsOptions::on_error`] to observe those errors, or enable the `tracing`
+//! feature to have them logged at the `ERROR` level on the `axum_streams` target.
+//!
 //! ## Need client support?
 //! There is the same functionality for:
 //! - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
