@@ -1,14 +1,16 @@
-use crate::progress::{ProgressStream, StreamProgressState};
 use crate::stream_format::StreamingFormat;
 use crate::{StreamBodyAsProgressHandler, StreamProgress};
 use axum::body::{Body, HttpBody};
 use axum::response::{IntoResponse, Response};
-use bytes::BytesMut;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use futures::{Stream, TryStreamExt};
 use http::{HeaderMap, HeaderValue};
 use http_body::Frame;
+use http_streams_core::{
+    buffer_bytes, buffer_ready_items, count_bytes, instrument, Counting, Direction, Progress,
+    ProgressOptions, Side, StreamContext,
+};
 use std::fmt::Formatter;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -71,36 +73,26 @@ impl<'a> StreamBodyAs<'a> {
         self
     }
 
-    /// Reports every error passing through the body exactly once, before the buffering
-    /// logic below can collapse or drop it.
+    /// Invokes [`StreamBodyAsOptions::on_error`] for every error passing through the body,
+    /// exactly once, before the buffering logic below can collapse or drop it.
     ///
     /// This is the single point every error reaches: each format forwards source errors
     /// verbatim and adds its own serialization errors to the same stream, so no format
     /// needs to know about reporting.
+    ///
+    /// Only the typed callback lives here. Logging and counting happen in
+    /// [`http_streams_core`], which sees the same errors further down the pipeline — but it
+    /// cannot invoke this callback, because the closure is typed to [`axum::Error`] and core
+    /// has no way to name that type.
     fn report_errors(
         stream: BoxStream<'a, Result<axum::body::Bytes, axum::Error>>,
         options: &StreamBodyAsOptions,
     ) -> BoxStream<'a, Result<axum::body::Bytes, axum::Error>> {
-        let handler = options.on_error.clone();
-
-        if handler.is_none() && !cfg!(feature = "tracing") {
+        let Some(handler) = options.on_error.clone() else {
             return stream;
-        }
+        };
 
-        stream
-            .inspect_err(move |err| {
-                #[cfg(feature = "tracing")]
-                tracing::error!(
-                    target: "axum_streams",
-                    error = %err,
-                    "An error occurred while streaming an HTTP body; the response will be terminated abnormally"
-                );
-
-                if let Some(handler) = &handler {
-                    handler(err);
-                }
-            })
-            .boxed()
+        stream.inspect_err(move |err| handler(err)).boxed()
     }
 
     fn create_stream_frames<S, T, FMT, E>(
@@ -113,91 +105,52 @@ impl<'a> StreamBodyAs<'a> {
         S: Stream<Item = Result<T, E>> + 'a + Send,
         E: Into<axum::Error>,
     {
-        let progress = StreamProgressState::maybe_new(stream_format.format_name(), options);
+        let context = StreamContext::new(
+            stream_format.format_name().unwrap_or("unknown").to_string(),
+            Direction::Response,
+            Side::Server,
+        );
+        let context = match options.buffering_bytes {
+            Some(bytes) => context.buf_capacity(bytes),
+            None => context,
+        };
+        let progress = Progress::new(&context, &options.progress_options());
 
         // Items only exist as items before the format consumes them, and every format maps
         // them one-to-one, so this is where they can be counted.
-        let boxed_stream: BoxStream<'a, Result<T, axum::Error>> = match &progress {
-            Some(state) => {
-                let state = state.clone();
-                Box::pin(
-                    stream
-                        .map_err(|e| e.into())
-                        .inspect_ok(move |_| state.record_item()),
-                )
-            }
-            None => Box::pin(stream.map_err(|e| e.into())),
-        };
+        //
+        // Done by hand rather than with core's `count_items` combinator: that returns an
+        // `impl Stream` bounded by the item type's lifetime, which would force a `T: 'a` bound
+        // onto this crate's public constructors. Boxing into the declared type avoids it.
+        let item_progress = progress.clone();
+        let boxed_stream: BoxStream<'a, Result<T, axum::Error>> = Box::pin(
+            stream
+                .map_err(|e| e.into())
+                .inspect_ok(move |_| item_progress.record_item()),
+        );
 
         let bytes_stream = Self::report_errors(
             stream_format.to_bytes_stream(boxed_stream, options),
             options,
         );
 
-        let frame_stream = match (options.buffering_ready_items, options.buffering_bytes) {
-            (Some(buffering_ready_items), _) => bytes_stream
-                .ready_chunks(buffering_ready_items)
-                .map(|chunks| {
-                    let mut buf = BytesMut::new();
-                    for chunk in chunks {
-                        buf.extend_from_slice(&chunk?);
-                    }
-                    Ok(Frame::data(buf.freeze()))
-                })
-                .boxed(),
-            (_, Some(buffering_bytes)) => {
-                let bytes_stream = bytes_stream.chain(futures::stream::once(
-                    futures::future::ready(Ok(bytes::Bytes::new())),
-                ));
+        // Counted before buffering rather than after: regrouping chunks does not change how
+        // many bytes there are, and counting here keeps the combinator generic.
+        let bytes_stream = count_bytes(bytes_stream, &progress);
 
-                bytes_stream
-                    .scan(
-                        (BytesMut::with_capacity(buffering_bytes), false),
-                        move |(current_buffer, errored), maybe_bytes| {
-                            futures::future::ready(if *errored {
-                                None
-                            } else {
-                                match maybe_bytes {
-                                    Ok(bytes) if bytes.is_empty() => {
-                                        Some(vec![Ok(Frame::data(current_buffer.split().freeze()))])
-                                    }
-                                    Ok(bytes) => {
-                                        let mut frames = Vec::new();
-                                        current_buffer.extend_from_slice(&bytes);
-                                        while current_buffer.len() >= buffering_bytes {
-                                            let buffer =
-                                                current_buffer.split_to(buffering_bytes).freeze();
-                                            frames.push(Ok(Frame::data(buffer)));
-                                        }
-                                        Some(frames)
-                                    }
-                                    // Propagate the error instead of ending the stream: returning
-                                    // `None` here made a failure indistinguishable from a clean EOF,
-                                    // so clients silently accepted a truncated body. Buffered bytes
-                                    // are dropped and the stream stops, so no data frame can follow
-                                    // the error via the trailing flush marker below.
-                                    Err(e) => {
-                                        *errored = true;
-                                        current_buffer.clear();
-                                        Some(vec![Err(e)])
-                                    }
-                                }
-                            })
-                        },
-                    )
-                    .flat_map(|res| futures::stream::iter(res).boxed())
-                    .boxed()
-            }
-            (None, None) => bytes_stream.map(|res| res.map(Frame::data)).boxed(),
-        };
+        let buffered: BoxStream<'a, Result<axum::body::Bytes, axum::Error>> =
+            match (options.buffering_ready_items, options.buffering_bytes) {
+                (Some(ready_items), _) => buffer_ready_items(bytes_stream, ready_items).boxed(),
+                (_, Some(bytes)) => buffer_bytes(bytes_stream, bytes).boxed(),
+                (None, None) => bytes_stream.boxed(),
+            };
 
-        // Wrapping the outermost stream keeps the byte count honest (it counts what actually
-        // reached the HTTP layer) and makes this adapter's `Drop` coincide with the body's,
-        // which is the only way to notice a client that hung up mid-stream.
-        match progress {
-            Some(state) => ProgressStream::new(frame_stream, state).boxed(),
-            None => frame_stream,
-        }
+        let frame_stream = Box::pin(buffered.map(|res| res.map(Frame::data)));
+
+        // Wrapping the outermost stream makes this adapter's `Drop` coincide with the body's,
+        // which is the only way to notice a client that hung up mid-stream. `Counting::Bytes`
+        // because by here the items are frames, not items — they were counted above.
+        instrument(frame_stream, progress, Counting::Bytes).boxed()
     }
 }
 
@@ -316,6 +269,20 @@ impl StreamBodyAsOptions {
     pub fn progress_interval(mut self, interval: Duration) -> Self {
         self.progress_interval = Some(interval);
         self
+    }
+
+    /// The direction-neutral subset of these options, for the shared accounting.
+    ///
+    /// `on_error` is deliberately not passed through: the closure is typed to [`axum::Error`],
+    /// which core cannot name, so it is invoked by [`StreamBodyAs::report_errors`] instead.
+    /// The consequence is that core's "is anyone listening?" check does not see it — which is
+    /// correct, since a body with only an `on_error` needs no counters maintained.
+    pub(crate) fn progress_options(&self) -> ProgressOptions {
+        let mut opts = ProgressOptions::new();
+        opts.on_progress = self.on_progress.clone();
+        opts.progress_interval = self.progress_interval;
+        opts.progress_items = self.progress_items;
+        opts
     }
 
     /// Additionally reports progress every `items` items.

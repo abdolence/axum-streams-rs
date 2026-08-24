@@ -15,7 +15,7 @@ impl TestClient {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("Could not bind ephemeral socket");
-        let addr = listener.local_addr().unwrap().clone();
+        let addr = listener.local_addr().unwrap();
         println!("Listening on {}", addr);
 
         tokio::spawn(async move {

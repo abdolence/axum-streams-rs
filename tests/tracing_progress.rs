@@ -94,7 +94,7 @@ async fn reports_the_summary_at_info() {
         "unexpected output: {captured}"
     );
     assert!(
-        captured.contains("axum_streams::stream_body"),
+        captured.contains("http_streams_core::stream"),
         "the summary must be recorded on the body span: {captured}"
     );
     assert!(
@@ -137,7 +137,7 @@ async fn capture_failure_at(level: tracing::Level) -> String {
 #[tokio::test(flavor = "current_thread")]
 async fn reports_the_failure_summary_when_only_error_is_enabled() {
     // The gate must sit at the least verbose level the accounting emits at. Gating at INFO
-    // meant `RUST_LOG=axum_streams=error` built no instrumentation at all, so the totals of
+    // meant `RUST_LOG=http_streams_core=error` built no instrumentation at all, so the totals of
     // the very responses that filter asks about were lost.
     let captured = capture_failure_at(tracing::Level::ERROR).await;
 

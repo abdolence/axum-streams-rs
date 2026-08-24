@@ -15,6 +15,19 @@
 //! This type of responses are useful when you are reading huge stream of objects from some source (such as database, file, etc)
 //! and want to avoid huge memory allocations to store on the server side.
 //!
+//! # Receiving a streamed request body
+//!
+//! The same formats work the other way round. [`StreamBodyFrom`] and its per-format aliases
+//! ([`JsonNlStreamFrom`], [`JsonArrayStreamFrom`], [`CsvStreamFrom`], [`ProtobufStreamFrom`],
+//! [`ArrowIpcStreamFrom`]) are extractors that decode an upload into a stream of items, so a
+//! handler processes a body of any size a record at a time.
+//!
+//! A route taking one needs `.layer(DefaultBodyLimit::disable())`: a streaming upload is
+//! exactly what axum's default body limit exists to stop. The extractor honours that limit
+//! rather than escaping it, so a body over it reports as `413` rather than being read anyway.
+//! Note the limit applies at 2 MiB even when no limit was configured explicitly, so a route
+//! that does not disable it caps uploads there.
+//!
 //! # Example
 //!
 //! ```rust
@@ -73,10 +86,14 @@
 //!
 //! The body is polled after your handler has returned, so nothing in the handler can report
 //! how much of the response actually went out. Enable the `tracing` feature and every body
-//! reports its totals once it ends, at `INFO`, on an `axum_streams::stream_body` span. Its
+//! reports its totals once it ends, at `INFO`, on an `http_streams_core::stream` span. Its
 //! `items`, `bytes`, `elapsed_ms` and `outcome` are recorded as span fields, so collectors
 //! read them as structured values. At `DEBUG` a long-running body additionally reports
 //! progress about once a second.
+//!
+//! The target is `http_streams_core`, shared with the client-side crate. Name both in your
+//! filter, so that anything this crate logs itself stays visible:
+//! `RUST_LOG=axum_streams=debug,http_streams_core=debug`.
 //!
 //! The `outcome` separates a `completed` response from an `aborted` one, meaning the client
 //! hung up mid-stream. A `failed` body reports at `ERROR` instead.
@@ -93,6 +110,7 @@
 //! - [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs).
 //!
 
+mod stream_encoding;
 mod stream_format;
 pub use stream_format::*;
 
@@ -101,6 +119,12 @@ pub use self::stream_body_as::HttpHeaderValue;
 pub use self::stream_body_as::StreamBodyAs;
 pub use self::stream_body_as::StreamBodyAsErrorHandler;
 pub use self::stream_body_as::StreamBodyAsOptions;
+
+mod stream_body_from;
+pub use stream_body_from::{
+    StreamBodyFrom, StreamBodyFromConfig, StreamBodyFromError, StreamBodyFromOptions,
+    StreamBodyFromRejection, DEFAULT_MAX_OBJ_LEN,
+};
 
 mod progress;
 pub use progress::{StreamBodyAsProgressHandler, StreamBodyOutcome, StreamProgress};
@@ -111,16 +135,17 @@ pub use envelope::*;
 #[cfg(feature = "json")]
 mod json_formats;
 #[cfg(feature = "json")]
-pub use json_formats::JsonArrayStreamFormat;
+pub use json_formats::{JsonArrayStreamFormat, JsonArrayStreamFrom};
 #[cfg(feature = "json")]
-pub use json_formats::JsonNewLineStreamFormat;
+pub use json_formats::{JsonNewLineStreamFormat, JsonNlStreamFrom};
 
 #[cfg(feature = "csv")]
 mod csv_format;
 #[cfg(feature = "csv")]
-pub use csv::{QuoteStyle, Terminator};
+pub use csv_format::{CsvStreamFormat, CsvStreamFrom};
 #[cfg(feature = "csv")]
-pub use csv_format::CsvStreamFormat;
+// Re-exported through core so that only one `csv` version is ever in play.
+pub use http_streams_core::{QuoteStyle, Terminator};
 
 #[cfg(feature = "text")]
 mod text_format;
@@ -130,12 +155,12 @@ pub use text_format::TextStreamFormat;
 #[cfg(feature = "protobuf")]
 mod protobuf_format;
 #[cfg(feature = "protobuf")]
-pub use protobuf_format::ProtobufStreamFormat;
+pub use protobuf_format::{ProtobufStreamFormat, ProtobufStreamFrom};
 
 #[cfg(feature = "arrow")]
 mod arrow_format;
 #[cfg(feature = "arrow")]
-pub use arrow_format::ArrowRecordBatchIpcStreamFormat;
+pub use arrow_format::{ArrowIpcStreamFrom, ArrowRecordBatchIpcStreamFormat};
 
 #[cfg(test)]
 mod test_client;

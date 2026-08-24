@@ -1,36 +1,23 @@
+//! Apache Arrow IPC responses.
+//!
+//! The format itself lives in [`http_streams_core`] and is re-exported here unchanged, so that
+//! this crate and `reqwest-streams` produce byte-identical bodies from one implementation.
+//! What remains here is the [`StreamingFormat`] shim — that trait names [`axum::Error`], which
+//! core cannot — and the response headers, which are an HTTP concern rather than a framing one.
+
 use crate::stream_body_as::StreamBodyAsOptions;
-use crate::{StreamBodyAs, StreamingFormat};
+use crate::stream_encoding::encode_items;
+use crate::stream_format::StreamingFormat;
+use crate::StreamBodyAs;
 use arrow::array::RecordBatch;
-use arrow::datatypes::{Schema, SchemaRef};
-use arrow::error::ArrowError;
-use arrow::ipc::writer::{
-    write_message, DictionaryTracker, IpcDataGenerator, IpcWriteContext, IpcWriteOptions,
-};
-use bytes::{BufMut, BytesMut};
+use arrow::datatypes::SchemaRef;
+use arrow::ipc::writer::IpcWriteOptions;
 use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
-use std::io::Write;
-use std::sync::Arc;
 
-pub struct ArrowRecordBatchIpcStreamFormat {
-    schema: SchemaRef,
-    options: IpcWriteOptions,
-}
-
-impl ArrowRecordBatchIpcStreamFormat {
-    pub fn new(schema: Arc<Schema>) -> Self {
-        Self::with_options(schema, IpcWriteOptions::default())
-    }
-
-    pub fn with_options(schema: Arc<Schema>, options: IpcWriteOptions) -> Self {
-        Self {
-            schema: schema.clone(),
-            options: options.clone(),
-        }
-    }
-}
+pub use http_streams_core::ArrowRecordBatchIpcStreamFormat;
 
 impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
     fn to_bytes_stream<'a, 'b>(
@@ -38,93 +25,7 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         stream: BoxStream<'b, Result<RecordBatch, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        fn write_batch(
-            ipc_data_gen: &mut IpcDataGenerator,
-            dictionary_tracker: &mut DictionaryTracker,
-            compression_context: &mut IpcWriteContext,
-            write_options: &IpcWriteOptions,
-            batch: &RecordBatch,
-            prepend_schema: Option<Arc<Schema>>,
-        ) -> Result<axum::body::Bytes, ArrowError> {
-            let mut writer = BytesMut::new().writer();
-
-            if let Some(prepend_schema) = prepend_schema {
-                let encoded_message = ipc_data_gen.schema_to_bytes_with_dictionary_tracker(
-                    &prepend_schema,
-                    dictionary_tracker,
-                    write_options,
-                );
-                write_message(&mut writer, encoded_message, write_options)?;
-            }
-
-            let (encoded_dictionaries, encoded_message) = ipc_data_gen.encode(
-                batch,
-                dictionary_tracker,
-                write_options,
-                compression_context,
-            )?;
-
-            for encoded_dictionary in encoded_dictionaries {
-                write_message(&mut writer, encoded_dictionary, write_options)?;
-            }
-
-            write_message(&mut writer, encoded_message, write_options)?;
-            writer.flush()?;
-            Ok(writer.into_inner().freeze())
-        }
-
-        fn write_continuation() -> Result<axum::body::Bytes, ArrowError> {
-            let mut writer = BytesMut::with_capacity(8).writer();
-            const CONTINUATION_MARKER: [u8; 4] = [0xff; 4];
-            const TOTAL_LEN: [u8; 4] = [0; 4];
-            writer.write_all(&CONTINUATION_MARKER)?;
-            writer.write_all(&TOTAL_LEN)?;
-            writer.flush()?;
-            Ok(writer.into_inner().freeze())
-        }
-
-        let batch_schema = self.schema.clone();
-        let batch_options = self.options.clone();
-
-        let ipc_data_gen = IpcDataGenerator::default();
-        let dictionary_tracker: DictionaryTracker = DictionaryTracker::new(false);
-        let compression_context = IpcWriteContext::default();
-
-        let batch_stream = Box::pin({
-            stream.scan(
-                (ipc_data_gen, dictionary_tracker, compression_context, 0),
-                move |(ipc_data_gen, dictionary_tracker, compression_context, idx), batch_res| {
-                    match batch_res {
-                        Err(e) => futures::future::ready(Some(Err(e))),
-                        Ok(batch) => futures::future::ready({
-                            let prepend_schema = if *idx == 0 {
-                                Some(batch_schema.clone())
-                            } else {
-                                None
-                            };
-                            *idx += 1;
-                            let bytes = write_batch(
-                                ipc_data_gen,
-                                dictionary_tracker,
-                                compression_context,
-                                &batch_options,
-                                &batch,
-                                prepend_schema,
-                            )
-                            .map_err(axum::Error::new);
-                            Some(bytes)
-                        }),
-                    }
-                },
-            )
-        });
-
-        let append_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
-            Box::pin(futures::stream::once(futures::future::ready({
-                write_continuation().map_err(axum::Error::new)
-            })));
-
-        Box::pin(batch_stream.chain(append_stream))
+        encode_items(self, stream)
     }
 
     fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
@@ -142,7 +43,6 @@ impl StreamingFormat<RecordBatch> for ArrowRecordBatchIpcStreamFormat {
         Some("arrow")
     }
 }
-
 impl<'a> crate::StreamBodyAs<'a> {
     pub fn arrow_ipc<S>(schema: SchemaRef, stream: S) -> Self
     where
@@ -241,6 +141,12 @@ impl StreamBodyAsOptions {
         )
     }
 }
+
+/// An Arrow IPC request body, decoded into a stream of record batches.
+///
+/// No schema is needed: an Arrow IPC stream carries its own.
+pub type ArrowIpcStreamFrom =
+    crate::StreamBodyFrom<ArrowRecordBatchIpcStreamFormat, arrow::array::RecordBatch>;
 
 #[cfg(test)]
 mod tests {
