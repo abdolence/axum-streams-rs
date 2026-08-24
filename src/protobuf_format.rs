@@ -1,4 +1,12 @@
+//! Length-prefixed protobuf responses.
+//!
+//! The format itself lives in [`http_streams_core`] and is re-exported here unchanged, so that
+//! this crate and `reqwest-streams` produce byte-identical bodies from one implementation.
+//! What remains here is the [`StreamingFormat`] shim — that trait names [`axum::Error`], which
+//! core cannot — and the response headers, which are an HTTP concern rather than a framing one.
+
 use crate::stream_body_as::StreamBodyAsOptions;
+use crate::stream_encoding::encode_items;
 use crate::stream_format::StreamingFormat;
 use crate::StreamBodyAs;
 use futures::stream::BoxStream;
@@ -6,13 +14,7 @@ use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
 
-pub struct ProtobufStreamFormat;
-
-impl ProtobufStreamFormat {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+pub use http_streams_core::ProtobufStreamFormat;
 
 impl<T> StreamingFormat<T> for ProtobufStreamFormat
 where
@@ -23,28 +25,7 @@ where
         stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        fn write_protobuf_record<T>(obj: T) -> Result<Vec<u8>, axum::Error>
-        where
-            T: prost::Message,
-        {
-            let obj_vec = obj.encode_to_vec();
-            let mut frame_vec = Vec::new();
-            let obj_len = (obj_vec.len() as u64);
-            prost::encoding::encode_varint(obj_len, &mut frame_vec);
-            frame_vec.extend(obj_vec);
-
-            Ok(frame_vec)
-        }
-
-        Box::pin({
-            stream.map(move |obj_res| match obj_res {
-                Err(e) => Err(e),
-                Ok(obj) => {
-                    let write_protobuf_res = write_protobuf_record(obj);
-                    write_protobuf_res.map(axum::body::Bytes::from)
-                }
-            })
-        })
+        encode_items(self, stream)
     }
 
     fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
@@ -62,7 +43,6 @@ where
         Some("protobuf")
     }
 }
-
 impl<'a> StreamBodyAs<'a> {
     pub fn protobuf<S, T>(stream: S) -> Self
     where
@@ -107,6 +87,9 @@ impl StreamBodyAsOptions {
         StreamBodyAs::with_options(ProtobufStreamFormat::new(), stream, self)
     }
 }
+
+/// A request body of length-prefixed protobuf messages, decoded into a stream of `T`.
+pub type ProtobufStreamFrom<T> = crate::StreamBodyFrom<ProtobufStreamFormat, T>;
 
 #[cfg(test)]
 mod tests {

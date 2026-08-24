@@ -17,9 +17,11 @@ struct MyError {
     message: String,
 }
 
-impl Into<axum::Error> for MyError {
-    fn into(self) -> axum::Error {
-        axum::Error::new(self.message)
+// `From` rather than `Into`: it gives the `Into` direction for free, and the orphan rules
+// permit `impl From<Local> for Foreign`.
+impl From<MyError> for axum::Error {
+    fn from(err: MyError) -> Self {
+        axum::Error::new(err.message)
     }
 }
 

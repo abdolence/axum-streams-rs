@@ -21,7 +21,7 @@ and want to avoid huge memory allocation.
 Cargo.toml:
 ```toml
 [dependencies]
-axum-streams = { version = "0.28", features=["json", "csv", "protobuf", "text", "arrow"] }
+axum-streams = { version = "0.29", features=["json", "csv", "protobuf", "text", "arrow"] }
 ```
 
 ## Compatibility matrix
@@ -74,6 +74,69 @@ To run example use:
 ```
 # cargo run --example json-example --features json
 ```
+
+## Receiving a streamed request body
+
+The mirror of the response side: an extractor that decodes an upload into a stream of items, so
+a handler processes a body of any size a record at a time without holding it in memory.
+
+```rust
+use axum::extract::DefaultBodyLimit;
+use axum_streams::{JsonNlStreamFrom, StreamBodyFromError};
+use futures::StreamExt;
+
+async fn ingest(mut items: JsonNlStreamFrom<MyTestStructure>) -> Result<Json<u64>, StreamBodyFromError> {
+    let mut count = 0;
+    while let Some(item) = items.next().await {
+        let _item = item?;
+        count += 1;
+    }
+    Ok(Json(count))
+}
+
+let app = Router::new()
+    .route("/ingest", post(ingest))
+    // A streaming upload is exactly what the default body limit exists to stop, so a route that
+    // wants one has to say so. The extractor honours the limit when it is set.
+    .layer(DefaultBodyLimit::disable());
+```
+
+There is one alias per format: `JsonNlStreamFrom`, `JsonArrayStreamFrom`, `CsvStreamFrom`,
+`ProtobufStreamFrom`, `ArrowIpcStreamFrom`. Text has no inbound counterpart, because its framing
+writes no delimiter and cannot be split back into items.
+
+### Errors arrive in two places
+
+A rejection has to be decided before any of the body is read, or the handler never gets to
+stream it. So only what is knowable from the headers can be a rejection: an unrecognised or
+missing `Content-Type` gives 415, and a declared `Content-Length` over the configured maximum
+gives 413.
+
+Everything else reaches the handler as an error item, because by then the handler already owns
+the stream. `StreamBodyFromError` implements `IntoResponse`, so `item?` produces the right
+status, provided the handler has not already begun writing its response.
+
+Whether one bad record ends the stream depends on the format. JSON Lines and CSV frame records
+independently, so a record that fails to deserialise is reported and reading continues. A JSON
+array, protobuf stream or Arrow stream cannot resynchronise after a bad record, so the first one
+ends the stream.
+
+### Configuring the format
+
+The extractor is built by axum, not by you, so there is nowhere to pass constructor arguments.
+Attach the format to the route instead, which is the same idiom `DefaultBodyLimit` uses:
+
+```rust
+Router::new()
+    .route("/ingest", post(ingest))
+    .layer(Extension(StreamBodyFromConfig::new(
+        CsvStreamFormat::new(true, b';'),
+    )))
+```
+
+Without one, the format is built with its defaults. `StreamBodyFromOptions` carries the rest:
+`max_obj_len` (one MiB by default, deliberately not unlimited for a body you did not produce),
+`buf_capacity`, `max_body_len` and `validate_content_type`.
 
 ## Need client support?
 There is the same functionality for:
@@ -137,11 +200,11 @@ source stream and serialization errors produced by the format itself:
 Alternatively, enable the `tracing` feature to have the library log them for you:
 
 ```toml
-axum-streams = { version = "0.28", features = ["json", "tracing"] }
+axum-streams = { version = "0.29", features = ["json", "tracing"] }
 ```
 
-Errors are then logged at the `ERROR` level on the `axum_streams` target, so they can be
-filtered with the usual `RUST_LOG=axum_streams=off`. Both the log event and your `on_error`
+Errors are then logged at the `ERROR` level on the `http_streams_core` target, so they can be
+filtered with `RUST_LOG=http_streams_core=off`. Both the log event and your `on_error`
 callback fire when the feature is enabled and a callback is set.
 
 Two things worth knowing:
@@ -157,32 +220,40 @@ handler can tell you how much of it actually went out. Enable the `tracing` feat
 library report that for you:
 
 ```toml
-axum-streams = { version = "0.28", features = ["json", "tracing"] }
+axum-streams = { version = "0.29", features = ["json", "tracing"] }
 ```
 
 At `INFO` every response reports its totals once, when it ends:
 
 ```text
-INFO axum_streams::stream_body{format="json_array" items=1000 bytes=28001 elapsed_ms=11239 outcome="completed"}: Finished streaming an HTTP body items=1000 bytes=28001 elapsed_ms=11239 outcome="completed"
+INFO http_streams_core::stream{format="json_array" direction="response" side="server" items=1000 bytes=28001 errors=0 elapsed_ms=11239 outcome="completed"}: Finished streaming an HTTP body items=1000 bytes=28001 errors=0 elapsed_ms=11239 outcome="completed"
 ```
 
 The `outcome` tells apart the three ways a response can end: `completed`, `aborted` (the
 client went away mid-stream, which is otherwise invisible), and `failed`, which reports at
 `ERROR` instead, alongside the error itself.
 
-Raise it to `RUST_LOG=axum_streams=debug` and long-running responses additionally report
-progress about once a second:
+Raise it to `RUST_LOG=axum_streams=debug,http_streams_core=debug` and long-running responses
+additionally report progress about once a second:
 
 ```text
-DEBUG axum_streams::stream_body{format="json_array"}: Streaming an HTTP body items=91 bytes=2548 elapsed_ms=1008
-DEBUG axum_streams::stream_body{format="json_array"}: Streaming an HTTP body items=182 bytes=5096 elapsed_ms=2018
-INFO  axum_streams::stream_body{format="json_array" items=358 bytes=10024 elapsed_ms=4000 outcome="aborted"}: Finished streaming an HTTP body items=358 bytes=10024 elapsed_ms=4000 outcome="aborted"
+DEBUG http_streams_core::stream{format="json_array"}: Streaming an HTTP body items=91 bytes=2548 elapsed_ms=1008
+DEBUG http_streams_core::stream{format="json_array"}: Streaming an HTTP body items=182 bytes=5096 elapsed_ms=2018
+INFO  http_streams_core::stream{format="json_array" items=358 bytes=10024 errors=0 elapsed_ms=4000 outcome="aborted"}: Finished streaming an HTTP body items=358 bytes=10024 errors=0 elapsed_ms=4000 outcome="aborted"
 ```
 
-Everything is recorded on an `axum_streams::stream_body` span, created while your handler's
+Everything is recorded on an `http_streams_core::stream` span, created while your handler's
 request span is still current, so collectors nest it under the request and read `items`,
-`bytes`, `elapsed_ms` and `outcome` as span attributes rather than as log text. Use
-`axum_streams=trace` to additionally get an event per frame.
+`bytes`, `errors`, `elapsed_ms` and `outcome` as span attributes rather than as log text. Use
+`http_streams_core=trace` to additionally get an event per frame.
+
+The target is `http_streams_core` rather than `axum_streams` because the accounting is shared
+with the client-side crate; the `direction` and `side` span fields tell the four cases apart.
+Name both targets in your filter, so that anything this crate logs itself stays visible:
+
+```text
+RUST_LOG=axum_streams=debug,http_streams_core=debug
+```
 
 Reporting is time-based by default, so the number of lines is bound by how long a response runs
 and not by how much it carries. Both triggers are configurable, and progress is also reported
@@ -257,6 +328,24 @@ The support is limited:
 ```rust
     #[serde(skip_serializing_if = "Vec::is_empty")]
 ```
+
+## Upgrading to 0.29
+
+**New:** `StreamBodyFrom` and its per-format aliases, for receiving a streamed request body.
+
+The wire formats now live in [`http-streams-core`](https://github.com/abdolence/http-streams-core-rs)
+and are shared with [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs), so both
+sides of a stream are encoded and decoded by one implementation. Four things are visible:
+
+- **The format types are re-exported unchanged.** `JsonArrayStreamFormat`, `CsvStreamFormat`
+  and the rest keep their names, paths and constructors.
+- **`StreamingFormat` is unchanged and still implementable.** Custom formats keep working.
+- **Tracing moved to the `http_streams_core` target** and to an `http_streams_core::stream`
+  span. `RUST_LOG=axum_streams=debug` no longer selects it on its own; use
+  `RUST_LOG=axum_streams=debug,http_streams_core=debug`.
+  Client and server are told apart by the `side` span field.
+- **`StreamProgress` gained an `errors` counter and is now `#[non_exhaustive]`.** If you
+  destructured it exhaustively in an `on_progress` callback, add `..` to the pattern.
 
 ## Licence
 Apache Software License (ASL)

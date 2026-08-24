@@ -11,7 +11,7 @@ license = "Apache-2.0"
 name = "axum-streams"
 readme = "README.md"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
-version = "0.28.0"
+version = "0.29.0"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -22,9 +22,13 @@ path = "src/lib.rs"
 
 [dependencies]
 axum = { version = "0.8", default-features = false }
+http-streams-core = { version = "0.1" }
 bytes = "1"
 http = "1"
 http-body = "1"
+# For classifying a tripped `DefaultBodyLimit` as such rather than as a generic I/O error.
+# Already in the tree via axum-core, so this costs nothing.
+http-body-util = "0.1"
 serde = { version = "1", features = ["serde_derive"], optional = true }
 serde_json = { version = "1", optional = true }
 tokio-stream = { version = "0.1" }
@@ -37,12 +41,12 @@ tracing = { version = "0.1.30", optional = true, default-features = false, featu
 
 [features]
 default = []
-json = ["dep:serde", "dep:serde_json"]
-csv = ["dep:csv", "dep:serde"]
-protobuf = ["dep:prost"]
-arrow = ["dep:arrow"]
-text = []
-tracing = ["dep:tracing"]
+json = ["dep:serde", "dep:serde_json", "http-streams-core/json"]
+csv = ["dep:csv", "dep:serde", "http-streams-core/csv"]
+protobuf = ["dep:prost", "http-streams-core/protobuf"]
+arrow = ["dep:arrow", "http-streams-core/arrow"]
+text = ["http-streams-core/text"]
+tracing = ["dep:tracing", "http-streams-core/tracing"]
 
 [dev-dependencies]
 axum = { version = "0.8" }
@@ -57,6 +61,11 @@ cargo-husky = { version = "1.5", default-features = false, features = ["run-for-
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "json-receive-example"
+path = "examples/json-receive-example.rs"
+required-features = ["json"]
 
 [[example]]
 name = "json-example"

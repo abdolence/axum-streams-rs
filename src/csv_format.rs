@@ -1,4 +1,12 @@
+//! CSV responses.
+//!
+//! The format itself lives in [`http_streams_core`] and is re-exported here unchanged, so that
+//! this crate and `reqwest-streams` produce byte-identical bodies from one implementation.
+//! What remains here is the [`StreamingFormat`] shim — that trait names [`axum::Error`], which
+//! core cannot — and the response headers, which are an HTTP concern rather than a framing one.
+
 use crate::stream_body_as::StreamBodyAsOptions;
+use crate::stream_encoding::encode_items;
 use crate::stream_format::StreamingFormat;
 use crate::StreamBodyAs;
 use futures::stream::BoxStream;
@@ -7,89 +15,7 @@ use futures::StreamExt;
 use http::HeaderMap;
 use serde::Serialize;
 
-pub struct CsvStreamFormat {
-    has_headers: bool,
-    delimiter: u8,
-    flexible: bool,
-    quote_style: csv::QuoteStyle,
-    quote: u8,
-    double_quote: bool,
-    escape: u8,
-    terminator: csv::Terminator,
-}
-
-impl Default for CsvStreamFormat {
-    fn default() -> Self {
-        Self {
-            has_headers: true,
-            delimiter: b',',
-            flexible: false,
-            quote_style: csv::QuoteStyle::Necessary,
-            quote: b'"',
-            double_quote: true,
-            escape: b'\\',
-            terminator: csv::Terminator::Any(b'\n'),
-        }
-    }
-}
-
-impl CsvStreamFormat {
-    pub fn new(has_headers: bool, delimiter: u8) -> Self {
-        Self {
-            has_headers,
-            delimiter,
-            ..Default::default()
-        }
-    }
-
-    /// Sets whether to use flexible serialize.
-    pub fn with_flexible(mut self, flexible: bool) -> Self {
-        self.flexible = flexible;
-        self
-    }
-
-    /// Sets the quote style to use.
-    pub fn with_quote_style(mut self, quote_style: csv::QuoteStyle) -> Self {
-        self.quote_style = quote_style;
-        self
-    }
-
-    /// Sets the quote character to use.
-    pub fn with_quote(mut self, quote: u8) -> Self {
-        self.quote = quote;
-        self
-    }
-
-    /// Sets whether to double quote.
-    pub fn with_double_quote(mut self, double_quote: bool) -> Self {
-        self.double_quote = double_quote;
-        self
-    }
-
-    /// Sets the escape character to use.
-    pub fn with_escape(mut self, escape: u8) -> Self {
-        self.escape = escape;
-        self
-    }
-
-    /// Sets the line terminator to use.
-    pub fn with_terminator(mut self, terminator: csv::Terminator) -> Self {
-        self.terminator = terminator;
-        self
-    }
-
-    /// Set the field delimiter to use.
-    pub fn with_delimiter(mut self, delimiter: u8) -> Self {
-        self.delimiter = delimiter;
-        self
-    }
-
-    /// Set whether to write headers.
-    pub fn with_has_headers(mut self, has_headers: bool) -> Self {
-        self.has_headers = has_headers;
-        self
-    }
-}
+pub use http_streams_core::CsvStreamFormat;
 
 impl<T> StreamingFormat<T> for CsvStreamFormat
 where
@@ -100,41 +26,7 @@ where
         stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        let stream_with_header = self.has_headers;
-        let stream_delimiter = self.delimiter;
-        let stream_flexible = self.flexible;
-        let stream_quote_style = self.quote_style;
-        let stream_quote = self.quote;
-        let stream_double_quote = self.double_quote;
-        let stream_escape = self.escape;
-        let terminator = self.terminator;
-
-        Box::pin({
-            stream
-                .enumerate()
-                .map(move |(index, obj_res)| match obj_res {
-                    Err(e) => Err(e),
-                    Ok(obj) => {
-                        let mut writer = csv::WriterBuilder::new()
-                            .has_headers(index == 0 && stream_with_header)
-                            .delimiter(stream_delimiter)
-                            .flexible(stream_flexible)
-                            .quote_style(stream_quote_style)
-                            .quote(stream_quote)
-                            .double_quote(stream_double_quote)
-                            .escape(stream_escape)
-                            .terminator(terminator)
-                            .from_writer(vec![]);
-
-                        writer.serialize(obj).map_err(axum::Error::new)?;
-                        writer.flush().map_err(axum::Error::new)?;
-                        writer
-                            .into_inner()
-                            .map_err(axum::Error::new)
-                            .map(axum::body::Bytes::from)
-                    }
-                })
-        })
+        encode_items(self, stream)
     }
 
     fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
@@ -153,7 +45,6 @@ where
         Some("csv")
     }
 }
-
 impl<'a> StreamBodyAs<'a> {
     pub fn csv<S, T>(stream: S) -> Self
     where
@@ -195,6 +86,45 @@ impl StreamBodyAsOptions {
         StreamBodyAs::with_options(CsvStreamFormat::new(false, b','), stream, self)
     }
 }
+
+/// A CSV request body, decoded into a stream of `T`.
+///
+/// Records are deserialised positionally; a header row is consumed and discarded. A malformed
+/// row is reported and the stream carries on, because rows are independently framed.
+///
+/// The default configuration is a comma delimiter with a header row. For anything else, attach
+/// the format to the route:
+///
+/// ```rust,no_run
+/// use axum::extract::DefaultBodyLimit;
+/// use axum::{routing::post, Extension, Router};
+/// use axum_streams::{CsvStreamFormat, CsvStreamFrom, StreamBodyFromConfig};
+/// use futures::StreamExt;
+/// use serde::Deserialize;
+///
+/// #[derive(Deserialize)]
+/// struct Row {
+///     id: u32,
+/// }
+///
+/// async fn ingest(mut rows: CsvStreamFrom<Row>) -> String {
+///     let mut count = 0;
+///     while let Some(row) = rows.next().await {
+///         if row.is_ok() {
+///             count += 1;
+///         }
+///     }
+///     format!("{count}")
+/// }
+///
+/// let app: Router = Router::new()
+///     .route("/ingest", post(ingest))
+///     .layer(Extension(StreamBodyFromConfig::new(
+///         CsvStreamFormat::new(true, b';'),
+///     )))
+///     .layer(DefaultBodyLimit::disable());
+/// ```
+pub type CsvStreamFrom<T> = crate::StreamBodyFrom<CsvStreamFormat, T>;
 
 #[cfg(test)]
 mod tests {

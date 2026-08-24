@@ -1,38 +1,21 @@
+//! JSON array and JSON Lines responses.
+//!
+//! The formats themselves live in [`http_streams_core`] and are re-exported here unchanged, so
+//! that this crate and `reqwest-streams` produce byte-identical bodies from one implementation.
+//! What remains here is the [`StreamingFormat`] shim — that trait names [`axum::Error`], which
+//! core cannot — and the response headers, which are an HTTP concern rather than a framing one.
+
 use crate::stream_body_as::StreamBodyAsOptions;
+use crate::stream_encoding::encode_items;
 use crate::stream_format::StreamingFormat;
-use crate::{StreamBodyAs, StreamFormatEnvelope};
-use bytes::{BufMut, BytesMut};
+use crate::StreamBodyAs;
 use futures::stream::BoxStream;
 use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
 use serde::Serialize;
-use std::io::Write;
 
-pub struct JsonArrayStreamFormat<E = ()>
-where
-    E: Serialize,
-{
-    envelope: Option<StreamFormatEnvelope<E>>,
-}
-
-impl JsonArrayStreamFormat {
-    pub fn new() -> JsonArrayStreamFormat<()> {
-        JsonArrayStreamFormat { envelope: None }
-    }
-
-    pub fn with_envelope<E>(envelope: E, array_field: &str) -> JsonArrayStreamFormat<E>
-    where
-        E: Serialize,
-    {
-        JsonArrayStreamFormat {
-            envelope: Some(StreamFormatEnvelope {
-                object: envelope,
-                array_field: array_field.to_string(),
-            }),
-        }
-    }
-}
+pub use http_streams_core::{JsonArrayStreamFormat, JsonNewLineStreamFormat};
 
 impl<T, E> StreamingFormat<T> for JsonArrayStreamFormat<E>
 where
@@ -44,78 +27,7 @@ where
         stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        let stream_bytes: BoxStream<Result<axum::body::Bytes, axum::Error>> = Box::pin({
-            stream.enumerate().map(|(index, obj_res)| match obj_res {
-                Err(e) => Err(e),
-                Ok(obj) => {
-                    let mut buf = BytesMut::new().writer();
-
-                    let sep_write_res = if index != 0 {
-                        buf.write_all(JSON_SEP_BYTES).map_err(axum::Error::new)
-                    } else {
-                        Ok(())
-                    };
-
-                    match sep_write_res {
-                        Ok(_) => {
-                            match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
-                                Ok(_) => Ok(buf.into_inner().freeze()),
-                                Err(e) => Err(e),
-                            }
-                        }
-                        Err(e) => Err(e),
-                    }
-                }
-            })
-        });
-
-        let prepend_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
-            Box::pin(futures::stream::once(futures::future::ready({
-                if let Some(envelope) = &self.envelope {
-                    match serde_json::to_vec(&envelope.object) {
-                        Ok(envelope_bytes) if envelope_bytes.len() > 1 => {
-                            let mut buf = BytesMut::new().writer();
-                            let envelope_slice = envelope_bytes.as_slice();
-                            match buf
-                                .write_all(&envelope_slice[0..envelope_slice.len() - 1])
-                                .and_then(|_| {
-                                    if envelope_bytes.len() > 2 {
-                                        buf.write_all(JSON_SEP_BYTES)
-                                    } else {
-                                        Ok(())
-                                    }
-                                })
-                                .and_then(|_| {
-                                    buf.write_all(
-                                        format!("\"{}\":", envelope.array_field).as_bytes(),
-                                    )
-                                })
-                                .and_then(|_| buf.write_all(JSON_ARRAY_BEGIN_BYTES))
-                            {
-                                Ok(_) => Ok::<_, axum::Error>(buf.into_inner().freeze()),
-                                Err(e) => Err(axum::Error::new(e)),
-                            }
-                        }
-                        Ok(envelope_bytes) => Err(axum::Error::new(std::io::Error::other(
-                            format!("Too short envelope: {envelope_bytes:?}"),
-                        ))),
-                        Err(e) => Err(axum::Error::new(e)),
-                    }
-                } else {
-                    Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_BEGIN_BYTES))
-                }
-            })));
-
-        let append_stream: BoxStream<Result<axum::body::Bytes, axum::Error>> =
-            Box::pin(futures::stream::once(futures::future::ready({
-                if self.envelope.is_some() {
-                    Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_ENVELOP_END_BYTES))
-                } else {
-                    Ok::<_, axum::Error>(axum::body::Bytes::from(JSON_ARRAY_END_BYTES))
-                }
-            })));
-
-        Box::pin(prepend_stream.chain(stream_bytes.chain(append_stream)))
+        encode_items(self, stream)
     }
 
     fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
@@ -135,14 +47,6 @@ where
     }
 }
 
-pub struct JsonNewLineStreamFormat;
-
-impl JsonNewLineStreamFormat {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 impl<T> StreamingFormat<T> for JsonNewLineStreamFormat
 where
     T: Serialize + Send + Sync + 'static,
@@ -152,21 +56,7 @@ where
         stream: BoxStream<'b, Result<T, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        Box::pin({
-            stream.map(|obj_res| match obj_res {
-                Err(e) => Err(e),
-                Ok(obj) => {
-                    let mut buf = BytesMut::new().writer();
-                    match serde_json::to_writer(&mut buf, &obj).map_err(axum::Error::new) {
-                        Ok(_) => match buf.write_all(JSON_NL_SEP_BYTES).map_err(axum::Error::new) {
-                            Ok(_) => Ok(buf.into_inner().freeze()),
-                            Err(e) => Err(e),
-                        },
-                        Err(e) => Err(e),
-                    }
-                }
-            })
-        })
+        encode_items(self, stream)
     }
 
     fn http_response_headers(&self, _: &StreamBodyAsOptions) -> Option<HeaderMap> {
@@ -182,13 +72,6 @@ where
         Some("json_nl")
     }
 }
-
-const JSON_ARRAY_BEGIN_BYTES: &[u8] = "[".as_bytes();
-const JSON_ARRAY_END_BYTES: &[u8] = "]".as_bytes();
-const JSON_ARRAY_ENVELOP_END_BYTES: &[u8] = "]}".as_bytes();
-const JSON_SEP_BYTES: &[u8] = ",".as_bytes();
-
-const JSON_NL_SEP_BYTES: &[u8] = "\n".as_bytes();
 
 impl<'a> crate::StreamBodyAs<'a> {
     pub fn json_array<S, T>(stream: S) -> Self
@@ -341,6 +224,44 @@ impl StreamBodyAsOptions {
         StreamBodyAs::with_options(JsonNewLineStreamFormat::new(), stream, self)
     }
 }
+
+/// A request body of JSON Lines, decoded into a stream of `T`.
+///
+/// ```rust,no_run
+/// use axum::extract::DefaultBodyLimit;
+/// use axum::{routing::post, Json, Router};
+/// use axum_streams::{JsonNlStreamFrom, StreamBodyFromError};
+/// use futures::StreamExt;
+/// use serde::Deserialize;
+///
+/// #[derive(Deserialize)]
+/// struct MyItem {
+///     field: String,
+/// }
+///
+/// async fn ingest(mut items: JsonNlStreamFrom<MyItem>) -> Result<Json<u64>, StreamBodyFromError> {
+///     let mut count = 0;
+///     while let Some(item) = items.next().await {
+///         // A malformed line is reported here, and the stream carries on to the next.
+///         let _item = item?;
+///         count += 1;
+///     }
+///     Ok(Json(count))
+/// }
+///
+/// let app: Router = Router::new()
+///     .route("/ingest", post(ingest))
+///     .layer(DefaultBodyLimit::disable());
+/// ```
+pub type JsonNlStreamFrom<T> = crate::StreamBodyFrom<JsonNewLineStreamFormat, T>;
+
+/// A request body of a JSON array, decoded into a stream of `T`.
+///
+/// Unlike JSON Lines, elements are not independently framed, so the first malformed element
+/// ends the stream.
+///
+/// An envelope is not unwrapped on the way in: the decoder expects a bare array.
+pub type JsonArrayStreamFrom<T> = crate::StreamBodyFrom<JsonArrayStreamFormat<()>, T>;
 
 #[cfg(test)]
 mod tests {

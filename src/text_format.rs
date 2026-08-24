@@ -1,4 +1,12 @@
+//! Raw UTF-8 text responses.
+//!
+//! The format itself lives in [`http_streams_core`] and is re-exported here unchanged, so that
+//! this crate and `reqwest-streams` produce byte-identical bodies from one implementation.
+//! What remains here is the [`StreamingFormat`] shim — that trait names [`axum::Error`], which
+//! core cannot — and the response headers, which are an HTTP concern rather than a framing one.
+
 use crate::stream_body_as::StreamBodyAsOptions;
+use crate::stream_encoding::encode_items;
 use crate::stream_format::StreamingFormat;
 use crate::StreamBodyAs;
 use futures::stream::BoxStream;
@@ -6,13 +14,7 @@ use futures::Stream;
 use futures::StreamExt;
 use http::HeaderMap;
 
-pub struct TextStreamFormat;
-
-impl TextStreamFormat {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+pub use http_streams_core::TextStreamFormat;
 
 impl StreamingFormat<String> for TextStreamFormat {
     fn to_bytes_stream<'a, 'b>(
@@ -20,15 +22,7 @@ impl StreamingFormat<String> for TextStreamFormat {
         stream: BoxStream<'b, Result<String, axum::Error>>,
         _: &'a StreamBodyAsOptions,
     ) -> BoxStream<'b, Result<axum::body::Bytes, axum::Error>> {
-        fn write_text_record(obj: String) -> Result<Vec<u8>, axum::Error> {
-            let obj_vec = obj.as_bytes().to_vec();
-            Ok(obj_vec)
-        }
-
-        Box::pin(stream.map(move |obj_res| match obj_res {
-            Err(e) => Err(e),
-            Ok(obj) => write_text_record(obj).map(|data| data.into()),
-        }))
+        encode_items(self, stream)
     }
 
     fn http_response_headers(&self, options: &StreamBodyAsOptions) -> Option<HeaderMap> {
@@ -46,7 +40,6 @@ impl StreamingFormat<String> for TextStreamFormat {
         Some("text")
     }
 }
-
 impl<'a> StreamBodyAs<'a> {
     pub fn text<S>(stream: S) -> Self
     where
