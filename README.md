@@ -329,24 +329,6 @@ The support is limited:
     #[serde(skip_serializing_if = "Vec::is_empty")]
 ```
 
-## Upgrading to 0.29
-
-**New:** `StreamBodyFrom` and its per-format aliases, for receiving a streamed request body.
-
-The wire formats now live in [`http-streams-core`](https://github.com/abdolence/http-streams-core-rs)
-and are shared with [reqwest-streams](https://github.com/abdolence/reqwest-streams-rs), so both
-sides of a stream are encoded and decoded by one implementation. Four things are visible:
-
-- **The format types are re-exported unchanged.** `JsonArrayStreamFormat`, `CsvStreamFormat`
-  and the rest keep their names, paths and constructors.
-- **`StreamingFormat` is unchanged and still implementable.** Custom formats keep working.
-- **Tracing moved to the `http_streams_core` target** and to an `http_streams_core::stream`
-  span. `RUST_LOG=axum_streams=debug` no longer selects it on its own; use
-  `RUST_LOG=axum_streams=debug,http_streams_core=debug`.
-  Client and server are told apart by the `side` span field.
-- **`StreamProgress` gained an `errors` counter and is now `#[non_exhaustive]`.** If you
-  destructured it exhaustively in an `on_progress` callback, add `..` to the pattern.
-
 ## Licence
 Apache Software License (ASL)
 
