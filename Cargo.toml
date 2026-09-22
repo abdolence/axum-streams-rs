@@ -22,7 +22,7 @@ path = "src/lib.rs"
 
 [dependencies]
 axum = { version = "0.8", default-features = false }
-http-streams-core = { version = "0.2" }
+http-streams-core = { version = "0.3" }
 bytes = "1"
 http = "1"
 http-body = "1"
